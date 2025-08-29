@@ -1,0 +1,46 @@
+{
+  "name": "night-ip-block",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jetgive43/Night-IP-Block.git"
+  },
+  "keywords": [
+    "ip-blocking",
+    "cdn",
+    "monitoring",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jetgive43/Night-IP-Block/issues"
+  },
+  "homepage": "https://github.com/jetgive43/Night-IP-Block#readme",
+  "description": "Real-time IP blocking and monitoring dashboard for CDN nodes",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "child_process": "^1.0.2",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-basic-auth": "^1.2.1",
+    "mysql2": "^3.11.3",
+    "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
+    "p-limit": "^3.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night IP Block - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .stat-card h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .stat-card p {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* Main three-part grid layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 3fr;
+            gap: 20px;
+            height: calc(100vh - 200px);
+            min-height: 600px;
+        }
+
+        /* Left side - two panels stacked */
+        .left-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .panel h3 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 8px;
+            font-weight: 600;
+        }
+
+        /* Country panel */
+        .country-panel {
+            flex: 1;
+            min-height: 0;
+            max-height: calc((100vh - 260px)/2);
+        }
+
+        /* ASN panel */
+        .asn-panel {
+            flex: 1;
+            min-height: 0;
+            max-height: calc((100vh - 260px)/2);
+        }
+
+        /* Middle panel - IP list */
+        .ip-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            max-height: calc(100vh - 246px);
+        }
+
+        /* Right panel - Log content */
+        .log-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            max-height: calc(100vh - 246px);
+        }
+
+        /* Item styling with reduced height */
+        .country-item, .asn-item, .ip-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+            border: 1px solid transparent;
+        }
+
+        .country-item:hover, .asn-item:hover, .ip-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+            transform: translateX(2px);
+        }
+
+        .country-item.clickable, .asn-item.clickable {
+            cursor: pointer;
+        }
+
+        .country-item.clickable:hover, .asn-item.clickable:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .country-item.selected, .asn-item.selected, .ip-item.selected {
+            background: #667eea;
+            color: white;
+            border-color: #5a6fd8;
+        }
+
+        /* Log entry styling */
+        .log-entry {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            font-size: 0.85rem;
+        }
+
+        .log-entry .ip {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 4px;
+        }
+
+        .log-entry .details {
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 15px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 8px 0;
+            font-size: 0.85rem;
+        }
+
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+            margin-top: 15px;
+        }
+
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+
+        .refresh-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* Scrollbar styling */
+        .panel::-webkit-scrollbar, .ip-panel::-webkit-scrollbar, .log-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .panel::-webkit-scrollbar-track, .ip-panel::-webkit-scrollbar-track, .log-panel::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .panel::-webkit-scrollbar-thumb, .ip-panel::-webkit-scrollbar-thumb, .log-panel::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        .panel::-webkit-scrollbar-thumb:hover, .ip-panel::-webkit-scrollbar-thumb:hover, .log-panel::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Responsive design */
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr 2fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .left-panels {
+                flex-direction: row;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <p>Real-time IP blocking and monitoring dashboard</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Blocked IPs</h3>
+                <div class="stat-number" id="totalBlocked">-</div>
+                <p>Total blocked IP addresses</p>
+            </div>
+            <div class="stat-card">
+                <h3>Active Countries</h3>
+                <div class="stat-number" id="activeCountries">-</div>
+                <p>Countries with blocked IPs</p>
+            </div>
+            <div class="stat-card">
+                <h3>Active ASNs</h3>
+                <div class="stat-number" id="activeASNs">-</div>
+                <p>Autonomous System Numbers</p>
+            </div>
+        </div>
+
+        <!-- Main three-part grid -->
+        <div class="main-grid">
+            <!-- Left side - Country and ASN panels -->
+            <div class="left-panels">
+                <div class="panel country-panel">
+                    <h3>🌍 Countries</h3>
+                    <div id="countryList" class="loading">Loading countries...</div>
+                </div>
+
+                <div class="panel asn-panel">
+                    <h3>🔗 ASN by Country</h3>
+                    <div id="asnList" class="loading">Select a country to view ASNs</div>
+                </div>
+            </div>
+
+            <!-- Middle panel - IP list -->
+            <div class="ip-panel">
+                <h3>📱 IP List</h3>
+                <div id="ipList" class="loading">Select a country or ASN to view IPs</div>
+            </div>
+
+            <!-- Right panel - Log content -->
+            <div class="log-panel">
+                <h3>📋 Log Content</h3>
+                <div id="logContent" class="loading">Select an IP address to view logs</div>
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">
+                🔄 Refresh Data
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentView = 'countries';
+        let selectedCountry = null;
+        let selectedASN = null;
+        let selectedIP = null;
+
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshData();
+        });
+
+        async function refreshData() {
+            const refreshBtn = document.getElementById('refreshBtn');
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '🔄 Refreshing...';
+
+            try {
+                await Promise.all([
+                    loadTotalBlocked(),
+                    loadCountries(),
+                    loadASNs()
+                ]);
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+                showError('Failed to refresh data. Please try again.');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Refresh Data';
+            }
+        }
+
+        async function loadTotalBlocked() {
+            try {
+                const response = await fetch('/api/total-blocked');
+                const data = await response.json();
+                document.getElementById('totalBlocked').textContent = data.total.toLocaleString();
+            } catch (error) {
+                console.error('Error loading total blocked:', error);
+            }
+        }
+
+        async function loadCountries() {
+            try {
+                const response = await fetch('/api/stats/countries');
+                const countries = await response.json();
+                
+                const countryList = document.getElementById('countryList');
+                if (countries.length === 0) {
+                    countryList.innerHTML = '<div class="loading">No countries found</div>';
+                    return;
+                }
+
+                const totalCountries = countries.length;
+                document.getElementById('activeCountries').textContent = totalCountries;
+
+                let html = '';
+                countries.forEach(country => {
+                    html += `
+                        <div class="country-item clickable" onclick="selectCountry('${country.country_code}')">
+                            <span>${country.country_code.toUpperCase()}</span>
+                            <span>${country.total_blocked_ips}</span>
+                        </div>
+                    `;
+                });
+                countryList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading countries:', error);
+                document.getElementById('countryList').innerHTML = '<div class="error">Failed to load countries</div>';
+            }
+        }
+
+        async function loadASNs() {
+            try {
+                const response = await fetch('/api/stats/asn');
+                const asns = await response.json();
+                
+                const asnList = document.getElementById('asnList');
+                if (asns.length === 0) {
+                    asnList.innerHTML = '<div class="loading">No ASNs found</div>';
+                    return;
+                }
+
+                document.getElementById('activeASNs').textContent = asns.length;
+
+                // Group ASNs by country
+                const asnsByCountry = {};
+                asns.forEach(asn => {
+                    if (!asnsByCountry[asn.country_code]) {
+                        asnsByCountry[asn.country_code] = [];
+                    }
+                    asnsByCountry[asn.country_code].push(asn);
+                });
+
+                let html = '';
+                Object.keys(asnsByCountry).forEach(countryCode => {
+                    html += `<div style="margin-bottom: 10px;"><strong>---${countryCode.toUpperCase()}---</strong></div>`;
+                    asnsByCountry[countryCode].forEach(asn => {
+                        html += `
+                            <div class="asn-item clickable" onclick="selectASN('${asn.asn}')">
+                                <span>${asn.asn}</span>
+                                <span>${asn.total_blocked_ips}</span>
+                            </div>
+                        `;
+                    });
+                });
+                asnList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading ASNs:', error);
+                document.getElementById('asnList').innerHTML = '<div class="error">Failed to load ASNs</div>';
+            }
+        }
+
+        async function selectCountry(countryCode) {
+            // Update selection state
+            clearSelections();
+            selectedCountry = countryCode;
+            currentView = 'country';
+            
+            // Highlight selected country
+            const countryItems = document.querySelectorAll('.country-item');
+            countryItems.forEach(item => {
+                if (item.textContent.includes(countryCode.toUpperCase())) {
+                    item.classList.add('selected');
+                }
+            });
+            
+            try {
+                const response = await fetch(`/api/ips/country/${countryCode}`);
+                const ips = await response.json();
+                
+                const ipList = document.getElementById('ipList');
+                if (ips.length === 0) {
+                    ipList.innerHTML = '<div class="loading">No IPs found for this country</div>';
+                    return;
+                }
+
+                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ${countryCode.toUpperCase()}</h4>`;
+                ips.forEach(ip => {
+                    html += `
+                        <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                            <span>${ip.ip}</span>
+                            <span>${ip.request_count}</span>
+                        </div>
+                    `;
+                });
+                ipList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading IPs for country:', error);
+                document.getElementById('ipList').innerHTML = '<div class="error">Failed to load IPs</div>';
+            }
+        }
+
+        async function selectASN(asn) {
+            // Update selection state
+            clearSelections();
+            selectedASN = asn;
+            currentView = 'asn';
+            
+            // Highlight selected ASN
+            const asnItems = document.querySelectorAll('.asn-item');
+            asnItems.forEach(item => {
+                if (item.textContent.includes(asn)) {
+                    item.classList.add('selected');
+                }
+            });
+            
+            try {
+                const response = await fetch(`/api/ips/asn/${asn}`);
+                const ips = await response.json();
+                
+                const ipList = document.getElementById('ipList');
+                if (ips.length === 0) {
+                    ipList.innerHTML = '<div class="loading">No IPs found for this ASN</div>';
+                    return;
+                }
+
+                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ASN ${asn}</h4>`;
+                ips.forEach(ip => {
+                    html += `
+                        <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                            <span>${ip.ip}</span>
+                            <span>${ip.request_count}</span>
+                        </div>
+                    `;
+                });
+                ipList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading IPs for ASN:', error);
+                document.getElementById('ipList').innerHTML = '<div class="error">Failed to load IPs</div>';
+            }
+        }
+
+        async function selectIP(ip) {
+            // Update selection state
+            clearSelections();
+            selectedIP = ip;
+            
+            // Highlight selected IP
+            const ipItems = document.querySelectorAll('.ip-item');
+            ipItems.forEach(item => {
+                if (item.textContent.includes(ip)) {
+                    item.classList.add('selected');
+                }
+            });
+            
+            try {
+                const response = await fetch(`/api/logs/ip/${ip}`);
+                const logs = await response.json();
+                
+                const logContent = document.getElementById('logContent');
+                if (logs.length === 0) {
+                    logContent.innerHTML = '<div class="loading">No logs found for this IP</div>';
+                    return;
+                }
+
+                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>`;
+                logs.forEach(log => {
+                    const timestamp = new Date(log.timestamp).toLocaleString();
+                    html += `
+                        <div class="log-entry">
+                            <div class="ip">${log.ip}</div>
+                            <div class="details">
+                                <strong>Time:</strong> ${timestamp} | 
+                                <strong>Domain:</strong> ${log.domain} | 
+                                <strong>Method:</strong> ${log.request_method} | 
+                                <strong>Path:</strong> ${log.request_path} | 
+                                <strong>Status:</strong> ${log.status_code} | 
+                                <strong>Response Time:</strong> ${log.response_time}s
+                            </div>
+                            <div class="details" style="margin-top: 4px;">
+                                <strong>User Agent:</strong> ${log.user_agent}
+                            </div>
+                        </div>
+                    `;
+                });
+                logContent.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading logs for IP:', error);
+                document.getElementById('logContent').innerHTML = '<div class="error">Failed to load logs</div>';
+            }
+        }
+
+        function clearSelections() {
+            // Remove all selection highlights
+            document.querySelectorAll('.country-item, .asn-item, .ip-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+        }
+
+        function showError(message) {
+            console.error(message);
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (!document.getElementById('refreshBtn').disabled) {
+                refreshData();
+            }
+        }, 30000);
+    </script>
+</body>
+</html> 
