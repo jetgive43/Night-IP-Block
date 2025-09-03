@@ -1,38 +1,66 @@
 const axios = require('axios');
-const NodeCache = require('node-cache');
 
-const cache = new NodeCache({ stdTTL: 3600 }); 
+// Simple in-memory cache
+let blockDataCache = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 3600000; // 1 hour in milliseconds
+
 /**
- * Fetches and caches block data from the API
+ * Fetches block data from the API
  */
-
-async function fetchAndCacheBlockData() {
+async function fetchBlockData() {
     try {
-        axios.get('http://blocking.middlewaresv.xyz/api/blockedip/all').then(response => {
-            const blockData = response.data;     
-            // Prepare a sorted array for binary search
-            const sortedData = blockData.map(block => ({
-                start: parseInt(block.startip),
-                end: parseInt(block.endip),
-                isBlocked: block.isBlocked,
-                countryCode: block.countryCode
-            }));
-            
-            // Sort by start IP
-            sortedData.sort((a, b) => a.start - b.start);
-            
-            // Store in cache
-            cache.set('block_data', sortedData);
-            
-            return sortedData;
-        }).catch(error => {
-            console.error('Error fetching block data:', error.message);
-            return null;
-        })
+        console.log('Fetching block data from API...');
+        const response = await axios.get('http://blocking.middlewaresv.xyz/api/blockedip/all', {
+            timeout: 10000
+        });
+        
+        const blockData = response.data;
+        console.log(`Received ${blockData.length} IP ranges from API`);
+        
+        const sortedData = blockData.map(block => ({
+            start: parseInt(block.startip),
+            end: parseInt(block.endip),
+            isBlocked: block.isBlocked,
+            countryCode: block.countryCode
+        }));
+        
+        sortedData.sort((a, b) => a.start - b.start);
+        console.log('Block data processed and sorted');
+        
+        return sortedData;
     } catch (error) {
         console.error('Error fetching block data:', error.message);
+        if (error.response) {
+            console.error(`HTTP Status: ${error.response.status}`);
+        }
         return null;
     }
+}
+
+/**
+ * Gets block data (from cache or API)
+ */
+async function getBlockData() {
+    const now = Date.now();
+    
+    // Check if we have valid cached data
+    if (blockDataCache && (now - lastFetchTime) < CACHE_DURATION) {
+        // console.log(`Using cached data (${blockDataCache.length} ranges, age: ${Math.round((now - lastFetchTime) / 1000)}s)`);
+        return blockDataCache;
+    }
+    
+    // Fetch new data
+    console.log('Cache expired or empty, fetching fresh data...');
+    const freshData = await fetchBlockData();
+    
+    if (freshData) {
+        blockDataCache = freshData;
+        lastFetchTime = now;
+        console.log('Data cached successfully');
+    }
+    
+    return freshData;
 }
 
 /**
@@ -79,22 +107,22 @@ function ip2long(ip) {
  */
 async function lookupIP(ip) {
     try {
-        // Get cached data or fetch new data
-        let blockData = cache.get('block_data');
+        const blockData = await getBlockData();
+        
         if (!blockData) {
-            console.log('Cache miss, fetching fresh data...');
-            blockData = await fetchAndCacheBlockData();
-            if (!blockData) {
-                throw new Error('Failed to fetch block data');
-            }
+            console.error('No block data available');
+            return {
+                blockStatus: 2,
+                countryCode: "xx",
+                error: "No block data available"
+            };
         }
         
         const hash = ip2long(ip);
         const searchResult = binarySearch(blockData, hash);
-        // filter block_status  != 0
         return searchResult;
     } catch (error) {
-        console.error('Error in IP lookup:', error.message);
+        console.error(`Error in lookupIP for ${ip}:`, error.message);
         return {
             blockStatus: 2,
             countryCode: "xx",
@@ -103,9 +131,29 @@ async function lookupIP(ip) {
     }
 }
 
+// Test function
+async function testLookup() {
+    const testIPs = [
+        "89.163.144.62",
+        "24.207.56.42", 
+        "109.49.242.86",
+        "73.197.203.61",
+        "192.168.1.1"
+    ];
+
+    console.log('=== Testing IP Lookup ===\n');
+    
+    for (const ip of testIPs) {
+        console.log(`\n--- Testing IP: ${ip} ---`);
+        const result = await lookupIP(ip);
+        console.log(`Block Status: ${result.blockStatus} (1=blocked, 0=not blocked, 2=not found)`);
+        console.log(`Country: ${result.countryCode}`);
+        console.log(`Should Log: ${result.blockStatus === 1 ? 'YES' : 'NO'}`);
+    }
+}
+
 // Example usage
 async function main() {
-    // Check if IP is provided as command line argument
     const ip = process.argv[2];
     
     if (!ip) {
@@ -115,18 +163,24 @@ async function main() {
     }
     
     const result = await lookupIP(ip);
+    console.log('Final result:', result);
 }
 
+testLookup();
 // Export functions for use in other modules
 module.exports = {
-    fetchAndCacheBlockData,
+    fetchBlockData,
+    getBlockData,
     binarySearch,
     ip2long,
     lookupIP,
-    cache
+    testLookup
 };
-
 // Run main function if this file is executed directly
 if (require.main === module) {
-    main().catch(console.error);
+    if (process.argv[2] === 'test') {
+        testLookup().catch(console.error);
+    } else {
+        main().catch(console.error);
+    }
 } 

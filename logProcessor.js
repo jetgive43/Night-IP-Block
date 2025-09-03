@@ -2,6 +2,7 @@ const axios = require('axios');
 const { lookupIP } = require('./fetchAndCacheIP');
 const { lookupIpToAsn, lookupIpToCountry } = require('./ipLookup');
 const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+const { isInNightTimeRange } = require('./utils'); // Add this import
 
 class LogProcessor {
   constructor() {
@@ -13,18 +14,24 @@ class LogProcessor {
     try {
       console.log('Starting category 9 log processing...');
       const nodes = await this.fetchNodes();
-      const category9Nodes = nodes.filter(node => node.category === 9);      
-      // Log all category 9 nodes for debugging
-      category9Nodes.forEach((node, index) => {
-        console.log(`Node ${index + 1}: IP=${node.ip}, Category=${node.category}`);
+      const category9Nodes = nodes.filter(node => node.category === 9);     
+      const category9NodesWithCountries = category9Nodes.map(node => {
+        const country = lookupIpToCountry(node.ip) || 'Unknown';
+        return {
+          ...node,
+          country: country
+        };
+      }).filter(node => {
+        const shouldProcess = isInNightTimeRange(node.country);
+        return shouldProcess;
       });
-      
-      for (const node of category9Nodes) {
-        console.log(`\n--- Processing node: ${node.ip} ---`);
+      console.log(category9NodesWithCountries);
+      console.log(`Found ${category9NodesWithCountries.length} nodes in night time range to process`);
+            
+      for (const node of category9NodesWithCountries) {
+        console.log(`\n--- Processing node: ${node.ip} (${node.country}) ---`);
         await this.processNodeLogs(node.ip);
-      }
-      await this.cleanOldLogs();
-      
+      }      
       console.log('Category 9 log processing completed');
     } catch (error) {
       console.error('Error in category 9 log processing:', error);
@@ -36,7 +43,7 @@ class LogProcessor {
       const response = await axios.get('https://slave.host-palace.net/portugal_cdn/get_node_list');
       return response.data;
     } catch (error) {
-      console.error('Error fetching nodes:', error);
+      // console.error('Error fetching nodes:', error);
       return [];
     }
   }
@@ -44,21 +51,15 @@ class LogProcessor {
   async processNodeLogs(ipAddress) {
     try {
       const calculatedInt = this.ipToInt(ipAddress);
-      console.log(`IP: ${ipAddress}, Calculated int: ${calculatedInt}`);
-      
       const logUrl = `http://${ipAddress}:29876/redirect${calculatedInt}.log`;
-      console.log(`Processing logs from ${ipAddress}: ${logUrl}`);
-      
-      // Test if the URL is accessible
       try {
         axios.get(logUrl,{timeout: 10000}).then(async response => {
-          const logContent = response.data;          
+          const logContent = response.data;   
           if (!logContent) {
             return;
           }
-          const logLines = logContent.split('\n').filter(line => line.trim());         
+          const logLines = logContent.split('\n').filter(line => line.trim());
           if (logLines.length === 0) {
-            console.log(`No log lines from ${ipAddress}`);
             return;
           }
           const lastTimestamp = this.lastProcessedTimestamps[ipAddress] || 0;
@@ -71,10 +72,7 @@ class LogProcessor {
           }
 
           if (newLines.length > 0) {
-            console.log(`Processing ${newLines.length} new log lines from ${ipAddress}`);
             await this.saveLogEntries(newLines);
-            
-            // Update last processed timestamp
             if (newLines.length > 0) {
               this.lastProcessedTimestamps[ipAddress] = Math.max(...newLines.map(l => l.timestamp));
             }
@@ -82,6 +80,7 @@ class LogProcessor {
         }).catch(error => {
           console.log(error)
         })
+        console.log(`Processing logs from ${ipAddress}: ${logUrl}`);
         
 
       } catch (axiosError) {
@@ -138,27 +137,56 @@ class LogProcessor {
 
   parseTimestamp(timestampStr) {
     const convertedStr = timestampStr.replace(/(\d+)\/(\w+)\/(\d+):/, '$1 $2 $3 ');
-   
     const date = new Date(convertedStr);
-    console.log('Parsed date:', date);
     
     if (isNaN(date.getTime())) {
-      console.error('Invalid date parsed:', convertedStr);
       return null;
     }
-    
-    return Math.floor(date.getTime() / 1000);
+    const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+    const timeMatch = timestampStr.match(/:(\d{2}):\d{2}:\d{2}/);
+    if (!timeMatch) {
+      console.error('Could not extract time from:', timestampStr);
+      return null;
+    }
+    const hour = parseInt(timeMatch[1], 10);
+    return Math.floor(japanTime.getTime() / 1000);
+    if (hour >= 2 && hour <= 5) {
+    } else {
+      return null;
+    }
   }
 
   async saveLogEntries(logEntries) {
     if (logEntries.length === 0) return;
+    const blockedLogEntries = [];
+    
+    for (const entry of logEntries) {
+      try {
+        const blockInfo = await lookupIP(entry.ip);
+        console.log(blockInfo)
+        if (blockInfo.blockStatus === 1) {
+          blockedLogEntries.push(entry);
+        } else {
+          // console.log(`Skipping IP ${entry.ip} - not blocked (status: ${blockInfo.blockStatus})`);
+        }
+      } catch (error) {
+        console.error(`Error checking block status for IP ${entry.ip}:`, error);
+      }
+    }
+
+    if (blockedLogEntries.length === 0) {
+      console.log('No blocked IPs found in log entries');
+      return;
+    }
 
     const connection = await connectToDatabase();
     try {
-      // Insert log entries
-      const logValues = logEntries.map(entry => 
-        `('${entry.ip}', FROM_UNIXTIME(${entry.timestamp}), '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`
-      ).join(', ');
+      // Insert log entries (only for blocked IPs) with Japan timezone
+      const logValues = blockedLogEntries.map(entry => {
+        // Convert Unix timestamp to Japan timezone string
+        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "Asia/Tokyo"});
+        return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
+      }).join(', ');
 
       const insertLogQuery = `
         INSERT INTO log_entries (ip, timestamp, domain, request_method, request_path, status_code, response_time, user_agent)
@@ -175,10 +203,10 @@ class LogProcessor {
 
       await runSqlQuery(connection, insertLogQuery);
 
-      // Process IPs for blocking
-      await this.processIPsForBlocking(logEntries, connection);
+      // Process IPs for blocking (only blocked IPs)
+      await this.processIPsForBlocking(blockedLogEntries, connection);
 
-      console.log(`Saved ${logEntries.length} log entries`);
+      console.log(`Saved ${blockedLogEntries.length} log entries (filtered from ${logEntries.length} total entries) in Japan timezone`);
     } catch (error) {
       console.error('Error saving log entries:', error);
     } finally {
@@ -303,13 +331,15 @@ class LogProcessor {
     try {
       const connection = await connectToDatabase();
       
-      // Remove logs older than 5 minutes
-      const fiveMinutesAgo = Math.floor(Date.now() / 1000) - (5 * 60);
-      const query = 'DELETE FROM log_entries WHERE timestamp < FROM_UNIXTIME(?)';
-      await runSqlQuery(connection, query, [fiveMinutesAgo]);
+      // Remove logs older than 5 minutes (in Japan timezone)
+      const fiveMinutesAgo = new Date(Date.now() - (5 * 60 * 1000));
+      const japanTime = fiveMinutesAgo.toLocaleString("sv-SE", {timeZone: "Asia/Tokyo"});
+      
+      const query = 'DELETE FROM log_entries WHERE timestamp < ?';
+      await runSqlQuery(connection, query, [japanTime]);
       
       await disconnectFromDatabase(connection);
-      console.log('Cleaned old logs');
+      console.log('Cleaned old logs (using Japan timezone)');
     } catch (error) {
       console.error('Error cleaning old logs:', error);
     }

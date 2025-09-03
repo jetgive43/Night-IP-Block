@@ -4,7 +4,7 @@ const path = require('path');
 const cron = require('node-cron');
 const { createTables } = require('./database');
 const LogProcessor = require('./logProcessor');
-
+const {fetchBlockData} = require('./fetchAndCacheIP');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -20,7 +20,7 @@ const logProcessor = new LogProcessor();
 async function initializeApp() {
   try {
     await createTables();
-    console.log('Database initialized successfully');
+    await fetchBlockData();
   } catch (error) {
     console.error('Failed to initialize database:', error);
   }
@@ -164,7 +164,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start cron jobs
+//Start cron jobs
 function startCronJobs() {
   // Process category 9 logs every 2 minutes
   cron.schedule('*/2 * * * *', async () => {
@@ -177,22 +177,23 @@ function startCronJobs() {
   });
 
   // Clean old logs every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
-    console.log('Running log cleanup...');
-    try {
-      await logProcessor.cleanOldLogs();
-    } catch (error) {
-      console.error('Error in cleanup cron job:', error);
-    }
-  });
-
+  // cron.schedule('*/5 * * * *', async () => {
+  //   console.log('Running log cleanup...');
+  //   try {
+  //     await logProcessor.cleanOldLogs();
+  //   } catch (error) {
+  //     console.error('Error in cleanup cron job:', error);
+  //   }
+  // });
+setTimeout(() => {
+  logProcessor.processCategory9Logs()
+}, 4000);
   console.log('Cron jobs started');
 }
 
 // Start server
 app.listen(PORT, async () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  
   // Initialize database and start cron jobs
   await initializeApp();
   startCronJobs();

@@ -411,7 +411,6 @@
                 });
                 countryList.innerHTML = html;
             } catch (error) {
-                console.error('Error loading countries:', error);
                 document.getElementById('countryList').innerHTML = '<div class="error">Failed to load countries</div>';
             }
         }
@@ -452,7 +451,6 @@
                 });
                 asnList.innerHTML = html;
             } catch (error) {
-                console.error('Error loading ASNs:', error);
                 document.getElementById('asnList').innerHTML = '<div class="error">Failed to load ASNs</div>';
             }
         }
@@ -492,7 +490,6 @@
                 });
                 ipList.innerHTML = html;
             } catch (error) {
-                console.error('Error loading IPs for country:', error);
                 document.getElementById('ipList').innerHTML = '<div class="error">Failed to load IPs</div>';
             }
         }
