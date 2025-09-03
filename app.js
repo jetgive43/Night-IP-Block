@@ -5,6 +5,7 @@ const cron = require('node-cron');
 const { createTables } = require('./database');
 const LogProcessor = require('./logProcessor');
 const {fetchBlockData} = require('./fetchAndCacheIP');
+const { ipToLong } = require('./ipLookup');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -27,6 +28,25 @@ async function initializeApp() {
 }
 
 // API Routes
+app.get('/api/blocked-ips', async (req, res) => {
+  try {
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    const query = `
+      SELECT ip
+      FROM blocked_ips
+      WHERE is_blocked = 1
+    `;
+    const results = await runSqlQuery(connection, query);
+    await disconnectFromDatabase(connection);
+    const ipLongs = results.map(row => ipToLong(row.ip));
+    res.json(ipLongs);
+  } catch (error) {
+    console.error('Error fetching blocked IPs:', error);
+    res.status(500).json({ error: 'Failed to fetch blocked IPs' });
+  }
+});
+
 app.get('/api/stats/countries', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');

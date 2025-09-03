@@ -141,4 +141,5 @@ module.exports = {
   lookupIpToAsn,
   lookupAsnToCountry,
   lookupIpToCountry,
+  ipToLong
 };
