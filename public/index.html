@@ -146,8 +146,8 @@
             max-height: calc(100vh - 246px);
         }
 
-        /* Item styling with reduced height */
-        .country-item, .asn-item, .ip-item {
+                /* Item styling with reduced height */
+                .country-item, .asn-item, .ip-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -159,6 +159,29 @@
             transition: all 0.2s ease;
             font-size: 0.9rem;
             border: 1px solid transparent;
+        }
+
+        .country-item.night-time {
+            border-left: 4px solid #28a745;
+            background: #f8fff9;
+        }
+
+        .country-item.day-time {
+            border-left: 4px solid #dc3545;
+            background: #fff8f8;
+        }
+
+        .country-time {
+            font-size: 0.75rem;
+            color: #666;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+
+        .country-item-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
         }
 
         .country-item:hover, .asn-item:hover, .ip-item:hover {
@@ -351,6 +374,68 @@
         let selectedASN = null;
         let selectedIP = null;
 
+        // Environment variables (from .env file)
+        const START_TIME = 16; // Default values, should match server-side
+        const END_TIME = 20;
+
+        // Country to timezone mapping (same as utils.js)
+        const countryTimezones = {
+            'US': 'America/New_York', 'GB': 'Europe/London', 'UK': 'Europe/London', 'ZY': 'Europe/London',
+            'DE': 'Europe/Berlin', 'NL': 'Europe/Amsterdam', 'FR': 'Europe/Paris', 'IT': 'Europe/Rome',
+            'ES': 'Europe/Madrid', 'CA': 'America/Toronto', 'ZX': 'America/Toronto', 'AU': 'Australia/Sydney',
+            'JP': 'Asia/Tokyo', 'CN': 'Asia/Shanghai', 'IN': 'Asia/Kolkata', 'BR': 'America/Sao_Paulo',
+            'RU': 'Europe/Moscow', 'MX': 'America/Mexico_City', 'KR': 'Asia/Seoul', 'SG': 'Asia/Singapore',
+            'HK': 'Asia/Hong_Kong', 'TW': 'Asia/Taipei', 'TH': 'Asia/Bangkok', 'ID': 'Asia/Jakarta',
+            'MY': 'Asia/Kuala_Lumpur', 'PH': 'Asia/Manila', 'VN': 'Asia/Ho_Chi_Minh', 'ZA': 'Africa/Johannesburg',
+            'EG': 'Africa/Cairo', 'NG': 'Africa/Lagos', 'KE': 'Africa/Nairobi', 'MA': 'Africa/Casablanca',
+            'AR': 'America/Argentina/Buenos_Aires', 'CL': 'America/Santiago', 'CO': 'America/Bogota',
+            'PE': 'America/Lima', 'VE': 'America/Caracas', 'NZ': 'Pacific/Auckland', 'NO': 'Europe/Oslo',
+            'SE': 'Europe/Stockholm', 'DK': 'Europe/Copenhagen', 'FI': 'Europe/Helsinki', 'PL': 'Europe/Warsaw',
+            'CZ': 'Europe/Prague', 'HU': 'Europe/Budapest', 'AT': 'Europe/Vienna', 'CH': 'Europe/Zurich',
+            'BE': 'Europe/Brussels', 'PT': 'Europe/Lisbon', 'IE': 'Europe/Dublin', 'IS': 'Atlantic/Reykjavik',
+            'TR': 'Europe/Istanbul', 'GR': 'Europe/Athens', 'IL': 'Asia/Jerusalem', 'SA': 'Asia/Riyadh',
+            'AE': 'Asia/Dubai', 'QA': 'Asia/Qatar', 'KW': 'Asia/Kuwait', 'BH': 'Asia/Bahrain',
+            'OM': 'Asia/Muscat', 'JO': 'Asia/Amman', 'LB': 'Asia/Beirut', 'CY': 'Asia/Nicosia',
+            'MT': 'Europe/Malta', 'LU': 'Europe/Luxembourg', 'SI': 'Europe/Ljubljana', 'SK': 'Europe/Bratislava',
+            'HR': 'Europe/Zagreb', 'BG': 'Europe/Sofia', 'RO': 'Europe/Bucharest', 'LT': 'Europe/Vilnius',
+            'LV': 'Europe/Riga', 'EE': 'Europe/Tallinn', 'UA': 'Europe/Kiev', 'BY': 'Europe/Minsk',
+            'MD': 'Europe/Chisinau', 'RS': 'Europe/Belgrade', 'BA': 'Europe/Sarajevo', 'ME': 'Europe/Podgorica',
+            'MK': 'Europe/Skopje', 'AL': 'Europe/Tirane', 'XK': 'Europe/Pristina', 'AD': 'Europe/Andorra',
+            'MC': 'Europe/Monaco', 'SM': 'Europe/San_Marino', 'VA': 'Europe/Vatican', 'LI': 'Europe/Vaduz',
+            'ZZ': 'Europe/Madrid'
+        };
+
+        // Get country's local time
+        function getCountryLocalTime(countryCode) {
+            const timezone = countryTimezones[countryCode.toUpperCase()];
+            console.log(timezone)
+            if (!timezone) {
+                return { time: 'Unknown', hour: null };
+            }
+
+            try {
+                const now = new Date();
+                const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
+                const hour = localTime.getHours();
+                const timeString = localTime.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                });
+                return { time: timeString, hour: hour };
+            } catch (error) {
+                console.error(`Error getting time for country ${countryCode}:`, error);
+                return { time: 'Error', hour: null };
+            }
+        }
+
+        // Check if country is in night time range (green = in range, red = not in range)
+        function isInNightTimeRange(countryCode) {
+            const { hour } = getCountryLocalTime(countryCode);
+            if (hour === null) return false;
+            return hour >= START_TIME && hour <= END_TIME;
+        }
+
         // Initialize the dashboard
         document.addEventListener('DOMContentLoaded', function() {
             refreshData();
@@ -402,9 +487,17 @@
 
                 let html = '';
                 countries.forEach(country => {
+                    const { time } = getCountryLocalTime(country.country_code);
+                    const isNightTime = isInNightTimeRange(country.country_code);
+                    const timeClass = isNightTime ? 'night-time' : 'day-time';
+                    const timeIcon = isNightTime ? '🌙' : '☀️';
+                    
                     html += `
-                        <div class="country-item clickable" onclick="selectCountry('${country.country_code}')">
-                            <span>${country.country_code.toUpperCase()}</span>
+                        <div class="country-item clickable ${timeClass}" onclick="selectCountry('${country.country_code}')">
+                            <div class="country-item-content">
+                                <span>${country.country_code.toUpperCase()}</span>
+                                <span class="country-time">${timeIcon} ${time}</span>
+                            </div>
                             <span>${country.total_blocked_ips}</span>
                         </div>
                     `;

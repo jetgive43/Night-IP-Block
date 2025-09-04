@@ -114,7 +114,12 @@ app.get('/api/ips/country/:countryCode', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch IPs' });
   }
 });
-
+app.get('/api/config', (req, res) => {
+  res.json({
+    startTime: parseInt(process.env.START_TIME) || 2,
+    endTime: parseInt(process.env.END_TIME) || 5
+  });
+});
 app.get('/api/ips/asn/:asn', async (req, res) => {
   try {
     const { asn } = req.params;

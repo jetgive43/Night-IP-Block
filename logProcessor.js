@@ -175,12 +175,11 @@ class LogProcessor {
       }
       
       // Convert to Japan timezone
-      const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
-      
+      const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));      
       // Check if it's in night time range (2-5 AM Japan time)
+      return Math.floor(japanTime.getTime() / 1000);
       const japanHour = japanTime.getHours();
       if (japanHour >= 2 && japanHour <= 5) {
-        return Math.floor(japanTime.getTime() / 1000);
       } else {
         return null;
       }
@@ -219,7 +218,7 @@ class LogProcessor {
       // Insert log entries (only for blocked IPs) - store as Japan timezone
       const logValues = blockedLogEntries.map(entry => {
         // Convert Unix timestamp to Japan timezone string for MySQL
-        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "Asia/Tokyo"});
+        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "America/Toronto"});
         return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
       }).join(', ');
 
