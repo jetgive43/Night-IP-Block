@@ -186,7 +186,7 @@ class LogProcessor {
       // Insert log entries (only for blocked IPs) with Japan timezone
         const logValues = blockedLogEntries.map(entry => {
         // Convert Unix timestamp to Japan timezone string
-        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "Atlantic/Reykjavik"});
+        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "America/Chicago"});
         return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
       }).join(', ');
 
