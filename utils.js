@@ -143,7 +143,7 @@ exports.isInNightTimeRange = (countryCode) => {
     console.log(localTime);
     const hour = localTime.getHours();
     // Check if it's between 2 AM and 5 AM
-    return hour >= 14 && hour <= 16;
+    return hour >= start_time && hour <= end_time;
     // return true
   } catch (error) {
     console.error(`Error getting time for country ${countryCode}:`, error);
