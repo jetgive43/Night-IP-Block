@@ -113,6 +113,17 @@ exports.createTables = async () => {
     `;
     await this.runSqlQuery(connection, createCountryStatsTable);
 
+    // Create whitelist table
+    const createWhitelistTable = `
+      CREATE TABLE IF NOT EXISTS whitelist (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ip VARCHAR(45) NOT NULL,
+        created_by VARCHAR(100) DEFAULT 'system',
+        UNIQUE KEY unique_ip (ip)
+      )
+    `;
+    await this.runSqlQuery(connection, createWhitelistTable);
+
     // Create asn_stats table
     const createAsnStatsTable = `
       CREATE TABLE IF NOT EXISTS asn_stats (
@@ -133,4 +144,12 @@ exports.createTables = async () => {
   } finally {
     await this.disconnectFromDatabase(connection);
   }
+};
+
+exports.getWhitelist = async () => {
+  const connection = await this.connectToDatabase();
+  const query = 'SELECT * FROM whitelist';
+  const results = await this.runSqlQuery(connection, query);
+  await this.disconnectFromDatabase(connection);
+  return results;
 };

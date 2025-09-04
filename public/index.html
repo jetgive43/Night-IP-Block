@@ -263,6 +263,28 @@
             cursor: not-allowed;
         }
 
+        .whitelist-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+            margin: 10px 0;
+            display: block;
+        }
+
+        .whitelist-btn:hover {
+            background: #218838;
+        }
+
+        .whitelist-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
         /* Scrollbar styling */
         .panel::-webkit-scrollbar, .ip-panel::-webkit-scrollbar, .log-panel::-webkit-scrollbar {
             width: 6px;
@@ -375,8 +397,8 @@
         let selectedIP = null;
 
         // Environment variables (from .env file)
-        const START_TIME = 16; // Default values, should match server-side
-        const END_TIME = 20;
+        const START_TIME = 2; // Default values, should match server-side
+        const END_TIME = 5;
 
         // Country to timezone mapping (same as utils.js)
         const countryTimezones = {
@@ -650,7 +672,12 @@
                     return;
                 }
 
-                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>`;
+                let html = `
+                    <h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>
+                    <button class="whitelist-btn" onclick="whitelistIP('${ip}')">
+                        ✅ Add to Whitelist
+                    </button>
+                `;
                 logs.forEach(log => {
                     const timestamp = new Date(log.timestamp).toLocaleString();
                     html += `
@@ -674,6 +701,35 @@
             } catch (error) {
                 console.error('Error loading logs for IP:', error);
                 document.getElementById('logContent').innerHTML = '<div class="error">Failed to load logs</div>';
+            }
+        }
+        async function whitelistIP(ip) {
+            if (!confirm(`Are you sure you want to whitelist ${ip}? This will remove all logs and blocked entries for this IP.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/whitelist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ip: ip })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`IP ${ip} has been successfully whitelisted and removed from the database.`);
+                    // Clear the log content and refresh data
+                    document.getElementById('logContent').innerHTML = '<div class="loading">Select an IP address to view logs</div>';
+                    refreshData();
+                } else {
+                    alert(`Error whitelisting IP: ${result.error}`);
+                }
+            } catch (error) {
+                console.error('Error whitelisting IP:', error);
+                alert('Failed to whitelist IP. Please try again.');
             }
         }
 

@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { lookupIP } = require('./fetchAndCacheIP');
 const { lookupIpToAsn, lookupIpToCountry } = require('./ipLookup');
-const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+const { runSqlQuery, connectToDatabase, disconnectFromDatabase, getWhitelist } = require('./database');
 const { isInNightTimeRange } = require('./utils'); // Add this import
 
 class LogProcessor {
@@ -13,6 +13,7 @@ class LogProcessor {
   async processCategory9Logs() {
     try {
       console.log('Starting category 9 log processing...');
+      const whitelist = await getWhitelist();
       const nodes = await this.fetchNodes();
       const category9Nodes = nodes.filter(node => node.category === 9);     
       const category9NodesWithCountries = category9Nodes.map(node => {
@@ -25,12 +26,11 @@ class LogProcessor {
         const shouldProcess = isInNightTimeRange(node.country);
         return shouldProcess;
       });
-      console.log(category9NodesWithCountries);
       console.log(`Found ${category9NodesWithCountries.length} nodes in night time range to process`);
             
       for (const node of category9NodesWithCountries) {
         console.log(`\n--- Processing node: ${node.ip} (${node.country}) ---`);
-        await this.processNodeLogs(node.ip);
+        await this.processNodeLogs(node.ip, whitelist);
       }      
       console.log('Category 9 log processing completed');
     } catch (error) {
@@ -48,7 +48,7 @@ class LogProcessor {
     }
   }
 
-  async processNodeLogs(ipAddress) {
+  async processNodeLogs(ipAddress, whitelist) {
     try {
       const calculatedInt = this.ipToInt(ipAddress);
       const logUrl = `http://${ipAddress}:29876/redirect${calculatedInt}.log`;
@@ -65,7 +65,7 @@ class LogProcessor {
           const lastTimestamp = this.lastProcessedTimestamps[ipAddress] || 0;
           const newLines = [];
           for (const line of logLines) {
-            const parsedLine = this.parseLogLine(line);
+            const parsedLine = this.parseLogLine(line, whitelist);
             if (parsedLine && parsedLine.timestamp > lastTimestamp) {
               newLines.push(parsedLine);
             }
@@ -101,11 +101,14 @@ class LogProcessor {
     }
   }
 
-  parseLogLine(line) {
+  parseLogLine(line, whitelist) {
     const parts = line.split('**');
     if (parts.length < 6) return null;
 
     const ipAddress = parts[0];
+    if (whitelist.includes(ipAddress)) {
+      return null;
+    }
     const timestampStr = parts[1].slice(1, -1); // Remove brackets
     const domain = parts[2];
     const requestInfo = parts[3];

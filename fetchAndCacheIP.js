@@ -10,24 +10,18 @@ const CACHE_DURATION = 3600000; // 1 hour in milliseconds
  */
 async function fetchBlockData() {
     try {
-        console.log('Fetching block data from API...');
         const response = await axios.get('http://blocking.middlewaresv.xyz/api/blockedip/all', {
             timeout: 10000
         });
         
-        const blockData = response.data;
-        console.log(`Received ${blockData.length} IP ranges from API`);
-        
+        const blockData = response.data;        
         const sortedData = blockData.map(block => ({
             start: parseInt(block.startip),
             end: parseInt(block.endip),
             isBlocked: block.isBlocked,
             countryCode: block.countryCode
         }));
-        
         sortedData.sort((a, b) => a.start - b.start);
-        console.log('Block data processed and sorted');
-        
         return sortedData;
     } catch (error) {
         console.error('Error fetching block data:', error.message);
@@ -46,18 +40,13 @@ async function getBlockData() {
     
     // Check if we have valid cached data
     if (blockDataCache && (now - lastFetchTime) < CACHE_DURATION) {
-        // console.log(`Using cached data (${blockDataCache.length} ranges, age: ${Math.round((now - lastFetchTime) / 1000)}s)`);
         return blockDataCache;
     }
-    
-    // Fetch new data
-    console.log('Cache expired or empty, fetching fresh data...');
     const freshData = await fetchBlockData();
     
     if (freshData) {
         blockDataCache = freshData;
         lastFetchTime = now;
-        console.log('Data cached successfully');
     }
     
     return freshData;
@@ -78,7 +67,6 @@ function binarySearch(data, ip) {
         } else if (ip > data[mid].end) {
             low = mid + 1;
         } else {
-            console.log(data[mid])
             return {
                 blockStatus: data[mid].isBlocked,
                 countryCode: (data[mid].countryCode === null || data[mid].countryCode === "") ? "xx" : data[mid].countryCode

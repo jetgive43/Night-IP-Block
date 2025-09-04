@@ -92,6 +92,40 @@ app.get('/api/stats/asn', async (req, res) => {
   }
 });
 
+// Whitelist IP endpoint
+app.post('/api/whitelist', async (req, res) => {
+  try {
+    const { ip } = req.body;
+    if (!ip) {
+      return res.status(400).json({ error: 'IP address is required' });
+    }
+
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    
+    try {
+      await runSqlQuery(connection, 'DELETE FROM log_entries WHERE ip = ?', [ip]);
+      await runSqlQuery(connection, 'DELETE FROM blocked_ips WHERE ip = ?', [ip]);
+      
+      await runSqlQuery(connection, 'INSERT IGNORE INTO whitelist (ip) VALUES (?)', [ip]);
+      const logProcessor = new LogProcessor();
+      await logProcessor.updateStatistics(connection);
+      await runSqlQuery(connection, 'COMMIT');
+      res.json({ message: `IP ${ip} has been whitelisted and removed from database` });
+    } catch (error) {
+      // Rollback transaction on error
+      await runSqlQuery(connection, 'ROLLBACK');
+      throw error;
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
+  } catch (error) {
+    console.error('Error whitelisting IP:', error);
+    res.status(500).json({ error: 'Failed to whitelist IP' });
+  }
+});
+
+// Serve the main page
 app.get('/api/ips/country/:countryCode', async (req, res) => {
   try {
     const { countryCode } = req.params;
