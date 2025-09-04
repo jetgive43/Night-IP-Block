@@ -136,21 +136,46 @@ class LogProcessor {
   }
 
   parseTimestamp(timestampStr) {
-    const convertedStr = timestampStr.replace(/(\d+)\/(\w+)\/(\d+):/, '$1 $2 $3 ');
-    const date = new Date(convertedStr);
+    // Parse the original timestamp format: [27/Aug/2025:07:55:05 +0000]
+    const match = timestampStr.match(/\[(\d+)\/(\w+)\/(\d+):(\d{2}):(\d{2}):(\d{2})\s+([+-]\d{4})\]/);
+    if (!match) {
+      console.error('Could not parse timestamp:', timestampStr);
+      return null;
+    }
+    
+    const [, day, month, year, hour, minute, second, timezone] = match;
+    
+    // Convert month name to number
+    const monthNames = {
+      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+    };
+    
+    const monthNum = monthNames[month];
+    if (monthNum === undefined) {
+      console.error('Invalid month:', month);
+      return null;
+    }
+    
+    // Create date object (this will be in UTC)
+    const date = new Date(Date.UTC(
+      parseInt(year),
+      monthNum,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute),
+      parseInt(second)
+    ));
     
     if (isNaN(date.getTime())) {
+      console.error('Invalid date created from:', timestampStr);
       return null;
     }
-    const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
-    const timeMatch = timestampStr.match(/:(\d{2}):\d{2}:\d{2}/);
-    if (!timeMatch) {
-      console.error('Could not extract time from:', timestampStr);
-      return null;
-    }
-    const hour = parseInt(timeMatch[1], 10);
-    return Math.floor(japanTime.getTime() / 1000);
-    if (hour >= 2 && hour <= 5) {
+    
+    // Check if it's in night time range (2-5 AM UTC)
+    const utcHour = date.getUTCHours();
+    if (utcHour >= 2 && utcHour <= 5) {
+      return Math.floor(date.getTime() / 1000);
     } else {
       return null;
     }
@@ -183,11 +208,11 @@ class LogProcessor {
 
     const connection = await connectToDatabase();
     try {
-      // Insert log entries (only for blocked IPs) with Japan timezone
-        const logValues = blockedLogEntries.map(entry => {
-        // Convert Unix timestamp to Japan timezone string
-        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("en-US", {timeZone: "Asia/Tokyo"});
-        return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
+      // Insert log entries (only for blocked IPs) - store as UTC timestamp
+      const logValues = blockedLogEntries.map(entry => {
+        // Convert Unix timestamp to MySQL datetime format (UTC)
+        const utcTime = new Date(entry.timestamp * 1000).toISOString().slice(0, 19).replace('T', ' ');
+        return `('${entry.ip}', '${utcTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
       }).join(', ');
 
       const insertLogQuery = `
@@ -329,7 +354,7 @@ class LogProcessor {
       
       // Remove logs older than 5 minutes (in Japan timezone)
       const fiveMinutesAgo = new Date(Date.now() - (5 * 60 * 1000));
-      const japanTime = fiveMinutesAgo.toLocaleString("sv-SE", {timeZone: "Asia/Tokyo"});
+      const japanTime = fiveMinutesAgo.toLocaleString("en-US", {timeZone: "Asia/Tokyo"});
       
       const query = 'DELETE FROM log_entries WHERE timestamp < ?';
       await runSqlQuery(connection, query, [japanTime]);
