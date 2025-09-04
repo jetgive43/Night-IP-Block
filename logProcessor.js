@@ -163,9 +163,11 @@ class LogProcessor {
     for (const entry of logEntries) {
       try {
         const blockInfo = await lookupIP(entry.ip);
-        console.log(blockInfo)
-        if (blockInfo.blockStatus === 1) {
-          blockedLogEntries.push(entry);
+        const blockedCountries = ['xx', 'ww'];
+        if (blockInfo.blockStatus === 0) {
+          if (!blockedCountries.includes(blockInfo.countryCode)) {
+            blockedLogEntries.push(entry);
+          }
         } else {
           // console.log(`Skipping IP ${entry.ip} - not blocked (status: ${blockInfo.blockStatus})`);
         }
@@ -216,25 +218,22 @@ class LogProcessor {
 
   async processIPsForBlocking(logEntries, connection) {
     try {
-      const uniqueIPs = [...new Set(logEntries.map(entry => entry.ip))];
-      
-      for (const ip of uniqueIPs) {
-        // Check if IP is already blocked
+      // Count occurrences of each IP in this batch
+      const ipCounts = {};
+      for (const entry of logEntries) {
+        ipCounts[entry.ip] = (ipCounts[entry.ip] || 0) + 1;
+      }
+
+      for (const [ip, count] of Object.entries(ipCounts)) {
         const existingIP = await this.getExistingIP(connection, ip);
-        
         if (!existingIP) {
-          // Get IP information
           const ipInfo = await this.getIPInfo(ip);
-          
-          // Insert new IP record
-          await this.insertIPRecord(connection, ip, ipInfo);
+          await this.insertIPRecord(connection, ip, ipInfo, count);
         } else {
-          // Update request count
-          await this.updateIPRequestCount(connection, ip);
+          await this.updateIPRequestCount(connection, ip, count);
         }
       }
 
-      // Update statistics
       await this.updateStatistics(connection);
     } catch (error) {
       console.error('Error processing IPs for blocking:', error);
@@ -276,26 +275,23 @@ class LogProcessor {
     }
   }
 
-  async insertIPRecord(connection, ip, ipInfo) {
-    try {
-      const query = `
-        INSERT INTO blocked_ips (ip, country_code, asn, is_blocked, request_count)
-        VALUES (?, ?, ?, ?, 1)
-      `;
-      await runSqlQuery(connection, query, [ip, ipInfo.countryCode, ipInfo.asn, ipInfo.isBlocked]);
-    } catch (error) {
-      console.error('Error inserting IP record:', error);
-    }
+  async insertIPRecord(connection, ip, ipInfo, count = 1) {
+    const query = `
+      INSERT INTO blocked_ips (ip, country_code, asn, is_blocked, request_count)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    await runSqlQuery(connection, query, [ip, ipInfo.countryCode, ipInfo.asn, ipInfo.isBlocked, count]);
   }
 
-  async updateIPRequestCount(connection, ip) {
-    try {
-      const query = 'UPDATE blocked_ips SET request_count = request_count + 1, last_seen = CURRENT_TIMESTAMP WHERE ip = ?';
-      await runSqlQuery(connection, query, [ip]);
-    } catch (error) {
-      console.error('Error updating IP request count:', error);
-    }
+  async updateIPRequestCount(connection, ip, count = 1) {
+    const query = `
+      UPDATE blocked_ips
+      SET request_count = request_count + ?, last_seen = CURRENT_TIMESTAMP
+      WHERE ip = ?
+    `;
+    await runSqlQuery(connection, query, [count, ip]);
   }
+
 
   async updateStatistics(connection) {
     try {
@@ -304,7 +300,7 @@ class LogProcessor {
         INSERT INTO country_stats (country_code, total_blocked_ips)
         SELECT country_code, COUNT(*) as total
         FROM blocked_ips
-        WHERE is_blocked = 1
+        WHERE is_blocked = 0
         GROUP BY country_code
         ON DUPLICATE KEY UPDATE
           total_blocked_ips = VALUES(total_blocked_ips)
@@ -316,7 +312,7 @@ class LogProcessor {
         INSERT INTO asn_stats (asn, country_code, total_blocked_ips)
         SELECT asn, country_code, COUNT(*) as total
         FROM blocked_ips
-        WHERE is_blocked = 1
+        WHERE is_blocked = 0
         GROUP BY asn, country_code
         ON DUPLICATE KEY UPDATE
           total_blocked_ips = VALUES(total_blocked_ips)

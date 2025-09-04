@@ -78,6 +78,7 @@ function binarySearch(data, ip) {
         } else if (ip > data[mid].end) {
             low = mid + 1;
         } else {
+            console.log(data[mid])
             return {
                 blockStatus: data[mid].isBlocked,
                 countryCode: (data[mid].countryCode === null || data[mid].countryCode === "") ? "xx" : data[mid].countryCode
@@ -166,7 +167,7 @@ async function main() {
     console.log('Final result:', result);
 }
 
-testLookup();
+// testLookup();
 // Export functions for use in other modules
 module.exports = {
     fetchBlockData,

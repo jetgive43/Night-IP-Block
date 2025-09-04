@@ -35,7 +35,7 @@ app.get('/api/blocked-ips', async (req, res) => {
     const query = `
       SELECT ip
       FROM blocked_ips
-      WHERE is_blocked = 1
+      WHERE is_blocked = 0
     `;
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
@@ -168,7 +168,7 @@ app.get('/api/total-blocked', async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
-    const query = 'SELECT COUNT(*) as total FROM blocked_ips WHERE is_blocked = 1';
+    const query = 'SELECT COUNT(*) as total FROM blocked_ips WHERE is_blocked = 0';
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
     

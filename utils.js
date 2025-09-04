@@ -1,3 +1,7 @@
+require("dotenv").config();
+const start_time = process.env.START_TIME? process.env.START_TIME: 2;
+const end_time = process.env.END_TIME ? process.env.END_TIME : 5;
+
 exports.createDateFromString = (dateString) => {
     const [datePart, timezone] = dateString.split(" ");
     const [fullDate, hours, minutes, seconds] = datePart.split(":");
@@ -137,11 +141,8 @@ exports.isInNightTimeRange = (countryCode) => {
     const now = new Date();
     const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
     const hour = localTime.getHours();
-    
-    console.log(`Country: ${countryCode}, Timezone: ${timezone}, Local Hour: ${hour}`);
-    
     // Check if it's between 2 AM and 5 AM
-    return hour >= 2 && hour <= 5;
+    return hour >= 14 && hour <= 16;
     // return true
   } catch (error) {
     console.error(`Error getting time for country ${countryCode}:`, error);
