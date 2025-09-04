@@ -136,51 +136,59 @@ class LogProcessor {
   }
 
   parseTimestamp(timestampStr) {
-    // Parse the original timestamp format: [27/Aug/2025:07:55:05 +0000]
-    const match = timestampStr.match(/\[(\d+)\/(\w+)\/(\d+):(\d{2}):(\d{2}):(\d{2})\s+([+-]\d{4})\]/);
-    if (!match) {
-      console.error('Could not parse timestamp:', timestampStr);
-      return null;
-    }
-    
-    const [, day, month, year, hour, minute, second, timezone] = match;
-    
-    // Convert month name to number
-    const monthNames = {
-      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-    };
-    
-    const monthNum = monthNames[month];
-    if (monthNum === undefined) {
-      console.error('Invalid month:', month);
-      return null;
-    }
-    
-    // Create date object (this will be in UTC)
-    const date = new Date(Date.UTC(
-      parseInt(year),
-      monthNum,
-      parseInt(day),
-      parseInt(hour),
-      parseInt(minute),
-      parseInt(second)
-    ));
-    
-    if (isNaN(date.getTime())) {
-      console.error('Invalid date created from:', timestampStr);
-      return null;
-    }
-    
-    // Check if it's in night time range (2-5 AM UTC)
-    const utcHour = date.getUTCHours();
-    if (utcHour >= 2 && utcHour <= 5) {
-      return Math.floor(date.getTime() / 1000);
-    } else {
+    try {
+      // Handle your format: 04/Sep/2025:16:46:01 +0000
+      const match = timestampStr.match(/(\d+)\/(\w+)\/(\d+):(\d{2}):(\d{2}):(\d{2})\s+([+-]\d{4})/);
+      
+      if (!match) {
+        console.error('Could not parse timestamp:', timestampStr);
+        return null;
+      }
+      
+      const [, day, month, year, hour, minute, second, timezone] = match;
+      
+      // Convert month name to number
+      const monthNames = {
+        'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+        'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+      };
+      
+      const monthNum = monthNames[month];
+      if (monthNum === undefined) {
+        console.error('Invalid month:', month);
+        return null;
+      }
+      
+      // Create date object (this will be in UTC)
+      const date = new Date(Date.UTC(
+        parseInt(year),
+        monthNum,
+        parseInt(day),
+        parseInt(hour),
+        parseInt(minute),
+        parseInt(second)
+      ));
+      
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date created from:', timestampStr);
+        return null;
+      }
+      
+      // Convert to Japan timezone
+      const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Tokyo"}));
+      
+      // Check if it's in night time range (2-5 AM Japan time)
+      const japanHour = japanTime.getHours();
+      if (japanHour >= 2 && japanHour <= 5) {
+        return Math.floor(japanTime.getTime() / 1000);
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error parsing timestamp:', timestampStr, error);
       return null;
     }
   }
-
   async saveLogEntries(logEntries) {
     if (logEntries.length === 0) return;
     const blockedLogEntries = [];
@@ -208,11 +216,11 @@ class LogProcessor {
 
     const connection = await connectToDatabase();
     try {
-      // Insert log entries (only for blocked IPs) - store as UTC timestamp
+      // Insert log entries (only for blocked IPs) - store as Japan timezone
       const logValues = blockedLogEntries.map(entry => {
-        // Convert Unix timestamp to MySQL datetime format (UTC)
-        const utcTime = new Date(entry.timestamp * 1000).toISOString().slice(0, 19).replace('T', ' ');
-        return `('${entry.ip}', '${utcTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
+        // Convert Unix timestamp to Japan timezone string for MySQL
+        const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "Asia/Tokyo"});
+        return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
       }).join(', ');
 
       const insertLogQuery = `
