@@ -111,6 +111,9 @@ class LogProcessor {
     }
     const timestampStr = parts[1].slice(1, -1); // Remove brackets
     const domain = parts[2];
+    if(domain.startsWith('xxxx')){
+      return null;
+    }
     const requestInfo = parts[3];
     const statusCode = parseInt(parts[4]);
     const responseTime = parseFloat(parts[5]);
