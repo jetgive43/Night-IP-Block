@@ -100,9 +100,10 @@ app.get('/api/blocked-ips', async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     const query = `
-      SELECT ip
-      FROM blocked_ips
-      WHERE is_blocked = 0
+      SELECT b.ip
+      FROM blocked_ips b
+      LEFT JOIN whitelist w ON b.ip = w.ip
+      WHERE w.ip IS NULL;
     `;
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
