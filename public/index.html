@@ -329,12 +329,33 @@
                 padding: 10px;
             }
         }
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .logout-btn:hover {
+            background: #c82333;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
+            <h1>🛡️ Night IP Block Dashboard</h1>
             <p>Real-time IP blocking and monitoring dashboard</p>
+            <div style="position: absolute; top: 20px; right: 20px;">
+                <span id="userInfo" style="color: white; margin-right: 15px;"></span>
+                <button class="logout-btn" onclick="logout()">
+                    🚪 Logout
+                </button>
+            </div>
         </div>
 
         <div class="stats-grid">
@@ -460,6 +481,7 @@
 
         // Initialize the dashboard
         document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
             refreshData();
         });
 
@@ -750,6 +772,47 @@
                 refreshData();
             }
         }, 30000);
+
+        async function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                try {
+                    const response = await fetch('/api/logout', {
+                        method: 'POST'
+                    });
+                    
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    } else {
+                        alert('Logout failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    alert('Network error during logout.');
+                }
+            }
+        }
+
+        // Check authentication status on page load
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/login';
+                    return;
+                }
+                
+                // Display user info
+                const userInfo = document.getElementById('userInfo');
+                if (userInfo) {
+                    userInfo.textContent = `Welcome, ${data.username}`;
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                window.location.href = '/login';
+            }
+        }
     </script>
 </body>
 </html> 

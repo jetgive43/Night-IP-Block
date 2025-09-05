@@ -1,4 +1,5 @@
 const express = require('express');
+const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 const cron = require('node-cron');
@@ -6,13 +7,45 @@ const { createTables } = require('./database');
 const LogProcessor = require('./logProcessor');
 const {fetchBlockData} = require('./fetchAndCacheIP');
 const { ipToLong } = require('./ipLookup');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Load environment variables
+require('dotenv').config();
+
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: false, // Set to true if using HTTPS
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
+
+// Authentication middleware
+function requireAuth(req, res, next) {
+  if (req.session && req.session.authenticated) {
+    return next();
+  } else {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+}
+
+// Serve static files but protect them
+app.use('/public', (req, res, next) => {
+  if (req.path === '/login.html') {
+    return next();
+  }
+  requireAuth(req, res, next);
+}, express.static(path.join(__dirname, 'public')));
 
 // Initialize log processor
 const logProcessor = new LogProcessor();
@@ -27,7 +60,40 @@ async function initializeApp() {
   }
 }
 
-// API Routes
+// Authentication routes
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  // Check credentials from environment variables
+  const validUsername = process.env.ADMIN_USERNAME || 'admin';
+  const validPassword = process.env.ADMIN_PASSWORD || 'admin';
+  
+  if (username === validUsername && password === validPassword) {
+    req.session.authenticated = true;
+    req.session.username = username;
+    res.json({ success: true, message: 'Login successful' });
+  } else {
+    res.status(401).json({ error: 'Invalid credentials' });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: 'Could not log out' });
+    }
+    res.json({ success: true, message: 'Logout successful' });
+  });
+});
+
+app.get('/api/auth/status', (req, res) => {
+  res.json({ 
+    authenticated: !!(req.session && req.session.authenticated),
+    username: req.session?.username || null
+  });
+});
+
+// Protected API Routes
 app.get('/api/blocked-ips', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -47,7 +113,7 @@ app.get('/api/blocked-ips', async (req, res) => {
   }
 });
 
-app.get('/api/stats/countries', async (req, res) => {
+app.get('/api/stats/countries', requireAuth, async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
@@ -71,7 +137,7 @@ app.get('/api/stats/countries', async (req, res) => {
   }
 });
 
-app.get('/api/stats/asn', async (req, res) => {
+app.get('/api/stats/asn', requireAuth, async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
@@ -93,7 +159,7 @@ app.get('/api/stats/asn', async (req, res) => {
 });
 
 // Whitelist IP endpoint
-app.post('/api/whitelist', async (req, res) => {
+app.post('/api/whitelist', requireAuth, async (req, res) => {
   try {
     const { ip } = req.body;
     if (!ip) {
@@ -125,8 +191,7 @@ app.post('/api/whitelist', async (req, res) => {
   }
 });
 
-// Serve the main page
-app.get('/api/ips/country/:countryCode', async (req, res) => {
+app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
   try {
     const { countryCode } = req.params;
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -148,13 +213,15 @@ app.get('/api/ips/country/:countryCode', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch IPs' });
   }
 });
-app.get('/api/config', (req, res) => {
+
+app.get('/api/config', requireAuth, (req, res) => {
   res.json({
     startTime: parseInt(process.env.START_TIME) || 2,
     endTime: parseInt(process.env.END_TIME) || 5
   });
 });
-app.get('/api/ips/asn/:asn', async (req, res) => {
+
+app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   try {
     const { asn } = req.params;
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -177,7 +244,7 @@ app.get('/api/ips/asn/:asn', async (req, res) => {
   }
 });
 
-app.get('/api/logs/ip/:ip', async (req, res) => {
+app.get('/api/logs/ip/:ip', requireAuth, async (req, res) => {
   try {
     const { ip } = req.params;
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -202,7 +269,7 @@ app.get('/api/logs/ip/:ip', async (req, res) => {
   }
 });
 
-app.get('/api/total-blocked', async (req, res) => {
+app.get('/api/total-blocked', requireAuth, async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
@@ -218,9 +285,18 @@ app.get('/api/total-blocked', async (req, res) => {
   }
 });
 
-// Serve the main page
+// Serve login page for unauthenticated users
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// Serve the main page (protected)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  if (req.session && req.session.authenticated) {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  } else {
+    res.redirect('/login');
+  }
 });
 
 //Start cron jobs
@@ -235,18 +311,9 @@ function startCronJobs() {
     }
   });
 
-  // Clean old logs every 5 minutes
-  // cron.schedule('*/5 * * * *', async () => {
-  //   console.log('Running log cleanup...');
-  //   try {
-  //     await logProcessor.cleanOldLogs();
-  //   } catch (error) {
-  //     console.error('Error in cleanup cron job:', error);
-  //   }
-  // });
-setTimeout(() => {
-  logProcessor.processCategory9Logs()
-}, 4000);
+  setTimeout(() => {
+    logProcessor.processCategory9Logs()
+  }, 4000);
   console.log('Cron jobs started');
 }
 
