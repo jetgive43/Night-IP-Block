@@ -181,8 +181,8 @@ class LogProcessor {
       const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));      
       // Check if it's in night time range (2-5 AM Japan time)
       const japanHour = japanTime.getHours();
+      return Math.floor(japanTime.getTime() / 1000);
       if (japanHour >= 2 && japanHour <= 5) {
-        return Math.floor(japanTime.getTime() / 1000);
       } else {
         return null;
       }
@@ -199,6 +199,10 @@ class LogProcessor {
       try {
         const blockInfo = await lookupIP(entry.ip);
         const blockedCountries = ['xx', 'ww'];
+        const isNightTime = isInNightTimeRange(blockInfo.countryCode);
+        if (!isNightTime) {
+          return;
+        }
         if (blockInfo.blockStatus === 0) {
           if (!blockedCountries.includes(blockInfo.countryCode)) {
             blockedLogEntries.push(entry);
