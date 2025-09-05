@@ -108,7 +108,7 @@ app.get('/api/blocked-ips', async (req, res) => {
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
     const ipLongs = results.map(row => ipToLong(row.ip));
-    res.json(ipLongs);
+    res.json(ipLongs.sort());
   } catch (error) {
     console.error('Error fetching blocked IPs:', error);
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
