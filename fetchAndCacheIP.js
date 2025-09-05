@@ -99,7 +99,6 @@ async function lookupIP(ip) {
         const blockData = await getBlockData();
         
         if (!blockData) {
-            console.error('No block data available');
             return {
                 blockStatus: 2,
                 countryCode: "xx",

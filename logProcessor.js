@@ -200,15 +200,14 @@ class LogProcessor {
         const blockInfo = await lookupIP(entry.ip);
         const blockedCountries = ['xx', 'ww'];
         const isNightTime = isInNightTimeRange(blockInfo.countryCode);
-        if (!isNightTime) {
-          return;
-        }
-        if (blockInfo.blockStatus === 0) {
-          if (!blockedCountries.includes(blockInfo.countryCode)) {
-            blockedLogEntries.push(entry);
+        if (isNightTime) {
+          if (blockInfo.blockStatus === 0) {
+            if (!blockedCountries.includes(blockInfo.countryCode)) {
+              blockedLogEntries.push(entry);
+            }
+          } else {
+            // console.log(`Skipping IP ${entry.ip} - not blocked (status: ${blockInfo.blockStatus})`);
           }
-        } else {
-          // console.log(`Skipping IP ${entry.ip} - not blocked (status: ${blockInfo.blockStatus})`);
         }
       } catch (error) {
         console.error(`Error checking block status for IP ${entry.ip}:`, error);
@@ -216,7 +215,7 @@ class LogProcessor {
     }
 
     if (blockedLogEntries.length === 0) {
-      console.log('No blocked IPs found in log entries');
+      console.log('No Night IPs found in log entries');
       return;
     }
 
