@@ -142,8 +142,8 @@ exports.isInNightTimeRange = (countryCode) => {
     const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
     const hour = localTime.getHours();
     // Check if it's between 2 AM and 5 AM
-    return hour >= start_time && hour <= end_time;
-    // return true
+    // return hour >= start_time && hour <= end_time;
+    return true
   } catch (error) {
     console.error(`Error getting time for country ${countryCode}:`, error);
     return false;

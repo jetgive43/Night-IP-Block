@@ -180,9 +180,9 @@ class LogProcessor {
       // Convert to Japan timezone
       const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));      
       // Check if it's in night time range (2-5 AM Japan time)
-      return Math.floor(japanTime.getTime() / 1000);
       const japanHour = japanTime.getHours();
       if (japanHour >= 2 && japanHour <= 5) {
+        return Math.floor(japanTime.getTime() / 1000);
       } else {
         return null;
       }
