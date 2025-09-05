@@ -67,6 +67,7 @@ app.post('/api/login', (req, res) => {
   // Check credentials from environment variables
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
   const validPassword = process.env.ADMIN_PASSWORD || 'admin';
+  console.log(validUsername, validPassword);
   
   if (username === validUsername && password === validPassword) {
     req.session.authenticated = true;
