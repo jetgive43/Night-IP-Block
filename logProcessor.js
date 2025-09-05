@@ -106,9 +106,9 @@ class LogProcessor {
     if (parts.length < 6) return null;
 
     const ipAddress = parts[0];
-    if (whitelist.includes(ipAddress)) {
-      return null;
-    }
+    // if (whitelist.includes(ipAddress)) {
+    //   return null;
+    // }
     const timestampStr = parts[1].slice(1, -1); // Remove brackets
     const domain = parts[2];
     if(domain.startsWith('xxxx')){

@@ -82,7 +82,7 @@
         /* Main three-part grid layout */
         .main-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 3fr;
+            grid-template-columns: 3fr 4fr 7fr;
             gap: 20px;
             height: calc(100vh - 200px);
             min-height: 600px;
@@ -160,7 +160,9 @@
             font-size: 0.9rem;
             border: 1px solid transparent;
         }
-
+        .ip-item {
+            padding: 5px;
+        }
         .country-item.night-time {
             border-left: 4px solid #28a745;
             background: #f8fff9;
@@ -272,7 +274,7 @@
             cursor: pointer;
             font-size: 0.9rem;
             transition: background-color 0.3s ease;
-            margin: 10px 0;
+            margin: 0px 0;
             display: block;
         }
 
@@ -307,7 +309,7 @@
         /* Responsive design */
         @media (max-width: 1200px) {
             .main-grid {
-                grid-template-columns: 1fr 1fr 2fr;
+                grid-template-columns: 1fr 2fr 3fr;
             }
         }
 
@@ -472,11 +474,29 @@
             }
         }
 
+        // Format duration from created_at to now
+        function formatDuration(createdAt) {
+            const now = new Date();
+            const created = new Date(createdAt);
+            const diffMs = now - created;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffMonths = Math.floor(diffDays / 30);
+
+            if (diffDays < 1) {
+                return `${diffHours}h ago`;
+            } else if (diffDays < 31) {
+                return `${diffDays}d ago`;
+            } else {
+                return `${diffMonths}mo ago`;
+            }
+        }
+
         // Check if country is in night time range (green = in range, red = not in range)
         function isInNightTimeRange(countryCode) {
             const { hour } = getCountryLocalTime(countryCode);
             if (hour === null) return false;
-            return hour >= START_TIME && hour <= END_TIME;
+            return hour >= START_TIME && hour < END_TIME;
         }
 
         // Initialize the dashboard
@@ -618,9 +638,16 @@
 
                 let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ${countryCode.toUpperCase()}</h4>`;
                 ips.forEach(ip => {
+                    console.log(ip.is_whitelisted ? ip.ip : '');
+                });
+                ips.forEach(ip => {
                     html += `
-                        <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                        <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
+                            <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                ${ip.is_whitelisted ? '-' : '+'}
+                            </button>
                             <span>${ip.ip}</span>
+                            <span>${formatDuration(ip.created_at)}</span>
                             <span>${ip.request_count}</span>
                         </div>
                     `;
@@ -696,9 +723,6 @@
 
                 let html = `
                     <h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>
-                    <button class="whitelist-btn" onclick="whitelistIP('${ip}')">
-                        ✅ Add to Whitelist
-                    </button>
                 `;
                 logs.forEach(log => {
                     const timestamp = new Date(log.timestamp).toLocaleString();
@@ -726,10 +750,6 @@
             }
         }
         async function whitelistIP(ip) {
-            if (!confirm(`Are you sure you want to whitelist ${ip}? This will remove all logs and blocked entries for this IP.`)) {
-                return;
-            }
-
             try {
                 const response = await fetch('/api/whitelist', {
                     method: 'POST',
@@ -738,13 +758,14 @@
                     },
                     body: JSON.stringify({ ip: ip })
                 });
-
-                const result = await response.json();
-                
+                const result = await response.json();                
                 if (response.ok) {
-                    alert(`IP ${ip} has been successfully whitelisted and removed from the database.`);
-                    // Clear the log content and refresh data
                     document.getElementById('logContent').innerHTML = '<div class="loading">Select an IP address to view logs</div>';
+                    if (selectedCountry) {
+                        await selectCountry(selectedCountry);
+                    } else if (selectedASN) {
+                        await selectASN(selectedASN);
+                    }
                     refreshData();
                 } else {
                     alert(`Error whitelisting IP: ${result.error}`);

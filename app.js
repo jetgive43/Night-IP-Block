@@ -170,15 +170,15 @@ app.post('/api/whitelist', requireAuth, async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
-    try {
-      await runSqlQuery(connection, 'DELETE FROM log_entries WHERE ip = ?', [ip]);
-      await runSqlQuery(connection, 'DELETE FROM blocked_ips WHERE ip = ?', [ip]);
-      
-      await runSqlQuery(connection, 'INSERT IGNORE INTO whitelist (ip) VALUES (?)', [ip]);
-      const logProcessor = new LogProcessor();
-      await logProcessor.updateStatistics(connection);
-      await runSqlQuery(connection, 'COMMIT');
-      res.json({ message: `IP ${ip} has been whitelisted and removed from database` });
+    try {      
+      const res_ip = await runSqlQuery(connection, 'SELECT ip FROM whitelist WHERE ip = ?', [ip]);
+      if(res_ip.length > 0) {
+        await runSqlQuery(connection, 'DELETE FROM whitelist WHERE ip = ?', [ip]);
+        res.json({ message: `IP ${ip} has been removed from whitelist` });
+      } else {
+        await runSqlQuery(connection, 'INSERT IGNORE INTO whitelist (ip) VALUES (?)', [ip]);
+        res.json({ message: `IP ${ip} has been whitelisted` });
+      }
     } catch (error) {
       // Rollback transaction on error
       await runSqlQuery(connection, 'ROLLBACK');
@@ -199,15 +199,18 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
     const connection = await connectToDatabase();
     
     const query = `
-      SELECT ip, country_code, asn, request_count, is_blocked, last_seen
+      SELECT ip, country_code, asn, request_count, is_blocked, last_seen, created_at
       FROM blocked_ips
       WHERE country_code = ?
       ORDER BY request_count DESC
     `;
-    
+    const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
     const results = await runSqlQuery(connection, query, [countryCode]);
     await disconnectFromDatabase(connection);
     
+    results.forEach(result => {
+      result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+    });
     res.json(results);
   } catch (error) {
     console.error('Error fetching IPs by country:', error);
