@@ -103,7 +103,7 @@ app.get('/api/blocked-ips', async (req, res) => {
       SELECT b.ip
       FROM blocked_ips b
       LEFT JOIN whitelist w ON b.ip = w.ip
-      WHERE w.ip IS NULL;
+      WHERE w.ip IS NULL and b.request_count > 3;
     `;
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
