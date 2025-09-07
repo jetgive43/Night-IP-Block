@@ -647,7 +647,7 @@
                                 ${ip.is_whitelisted ? '-' : '+'}
                             </button>
                             <span>${ip.ip}</span>
-                            <span>${formatDuration(ip.created_at)}</span>
+                            <span>${ip.blocking_days} days  blocked</span>
                             <span>${ip.request_count}</span>
                         </div>
                     `;

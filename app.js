@@ -199,20 +199,32 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
-    const query = `
-      SELECT ip, country_code, asn, request_count, is_blocked, last_seen, created_at
-      FROM blocked_ips
-      WHERE country_code = ?
-      ORDER BY request_count DESC
-    `;
-    const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
-    const results = await runSqlQuery(connection, query, [countryCode]);
-    await disconnectFromDatabase(connection);
-    
-    results.forEach(result => {
-      result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
-    });
-    res.json(results);
+    try {
+      const query = `
+        SELECT b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at,
+               COUNT(DISTINCT DATE(l.timestamp)) as blocking_days
+        FROM blocked_ips b
+        LEFT JOIN log_entries l ON b.ip = l.ip
+        LEFT JOIN whitelist w ON b.ip = w.ip
+        WHERE b.country_code = ?
+        GROUP BY b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at
+        ORDER BY b.request_count DESC
+      `;
+      
+      const results = await runSqlQuery(connection, query, [countryCode]);
+      
+      // Get whitelist status
+      const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
+      
+      // Add whitelist status to results
+      results.forEach(result => {
+        result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+      });
+      
+      res.json(results);
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
   } catch (error) {
     console.error('Error fetching IPs by country:', error);
     res.status(500).json({ error: 'Failed to fetch IPs' });
@@ -232,17 +244,32 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
-    const query = `
-      SELECT ip, country_code, asn, request_count, is_blocked, last_seen
-      FROM blocked_ips
-      WHERE asn = ?
-      ORDER BY request_count DESC
-    `;
-    
-    const results = await runSqlQuery(connection, query, [asn]);
-    await disconnectFromDatabase(connection);
-    
-    res.json(results);
+    try {
+      const query = `
+        SELECT b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at,
+               COUNT(DISTINCT DATE(l.timestamp)) as blocking_days
+        FROM blocked_ips b
+        LEFT JOIN log_entries l ON b.ip = l.ip
+        LEFT JOIN whitelist w ON b.ip = w.ip
+        WHERE b.asn = ?
+        GROUP BY b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at
+        ORDER BY b.request_count DESC
+      `;
+      
+      const results = await runSqlQuery(connection, query, [asn]);
+      
+      // Get whitelist status
+      const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
+      
+      // Add whitelist status to results
+      results.forEach(result => {
+        result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+      });
+      
+      res.json(results);
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
   } catch (error) {
     console.error('Error fetching IPs by ASN:', error);
     res.status(500).json({ error: 'Failed to fetch IPs' });
@@ -327,7 +354,7 @@ app.listen(PORT, async () => {
   console.log(`Server is running on http://localhost:${PORT}`);
   // Initialize database and start cron jobs
   await initializeApp();
-  startCronJobs();
+  // startCronJobs();
 });
 
 module.exports = app;
