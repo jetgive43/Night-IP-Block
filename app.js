@@ -3,7 +3,7 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 const cron = require('node-cron');
-const { createTables } = require('./database');
+const { createTables, addBlockingDaysColumn, updateBlockingDays } = require('./database');
 const LogProcessor = require('./logProcessor');
 const {fetchBlockData} = require('./fetchAndCacheIP');
 const { ipToLong } = require('./ipLookup');
@@ -50,13 +50,18 @@ app.use('/public', (req, res, next) => {
 // Initialize log processor
 const logProcessor = new LogProcessor();
 
-// Initialize database tables on startup
+// Initialize app with migration
 async function initializeApp() {
   try {
     await createTables();
-    await fetchBlockData();
+    
+    // Add blocking_days column if it doesn't exist
+    await addBlockingDaysColumn();
+    
+    console.log('App initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize database:', error);
+    console.error('Error initializing app:', error);
+    process.exit(1);
   }
 }
 
@@ -193,25 +198,37 @@ app.post('/api/whitelist', requireAuth, async (req, res) => {
   }
 });
 
+// Paginated IPs by country
 app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
   try {
     const { countryCode } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
     try {
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM blocked_ips
+        WHERE country_code = ?
+      `;
+      const countResult = await runSqlQuery(connection, countQuery, [countryCode]);
+      const total = countResult[0].total;
+      
+      // Get paginated results
       const query = `
-        SELECT b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at,
-               COUNT(DISTINCT DATE(l.timestamp)) as blocking_days
-        FROM blocked_ips b
-        LEFT JOIN log_entries l ON b.ip = l.ip
-        LEFT JOIN whitelist w ON b.ip = w.ip
-        WHERE b.country_code = ?
-        GROUP BY b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at
-        ORDER BY b.request_count DESC
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        FROM blocked_ips
+        WHERE country_code = ?
+        ORDER BY request_count DESC
+        LIMIT ? OFFSET ?
       `;
       
-      const results = await runSqlQuery(connection, query, [countryCode]);
+      const results = await runSqlQuery(connection, query, [countryCode, limit, offset]);
       
       // Get whitelist status
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
@@ -221,7 +238,17 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
       
-      res.json(results);
+      res.json({
+        data: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
+      });
     } finally {
       await disconnectFromDatabase(connection);
     }
@@ -238,25 +265,37 @@ app.get('/api/config', requireAuth, (req, res) => {
   });
 });
 
+// Paginated IPs by ASN
 app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   try {
     const { asn } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
     try {
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM blocked_ips
+        WHERE asn = ?
+      `;
+      const countResult = await runSqlQuery(connection, countQuery, [asn]);
+      const total = countResult[0].total;
+      
+      // Get paginated results
       const query = `
-        SELECT b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at,
-               COUNT(DISTINCT DATE(l.timestamp)) as blocking_days
-        FROM blocked_ips b
-        LEFT JOIN log_entries l ON b.ip = l.ip
-        LEFT JOIN whitelist w ON b.ip = w.ip
-        WHERE b.asn = ?
-        GROUP BY b.ip, b.country_code, b.asn, b.request_count, b.is_blocked, b.last_seen, b.created_at
-        ORDER BY b.request_count DESC
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        FROM blocked_ips
+        WHERE asn = ?
+        ORDER BY request_count DESC
+        LIMIT ? OFFSET ?
       `;
       
-      const results = await runSqlQuery(connection, query, [asn]);
+      const results = await runSqlQuery(connection, query, [asn, limit, offset]);
       
       // Get whitelist status
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
@@ -266,7 +305,17 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
       
-      res.json(results);
+      res.json({
+        data: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
+      });
     } finally {
       await disconnectFromDatabase(connection);
     }
@@ -276,25 +325,54 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   }
 });
 
+// Paginated logs by IP
 app.get('/api/logs/ip/:ip', requireAuth, async (req, res) => {
   try {
     const { ip } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     
-    const query = `
-      SELECT ip, timestamp, domain, request_method, request_path, 
-             status_code, response_time, user_agent
-      FROM log_entries
-      WHERE ip = ?
-      ORDER BY timestamp DESC
-      LIMIT 100
-    `;
-    
-    const results = await runSqlQuery(connection, query, [ip]);
-    await disconnectFromDatabase(connection);
-    
-    res.json(results);
+    try {
+      // Get total count
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM log_entries
+        WHERE ip = ?
+      `;
+      const countResult = await runSqlQuery(connection, countQuery, [ip]);
+      const total = countResult[0].total;
+      
+      // Get paginated results
+      const query = `
+        SELECT ip, timestamp, domain, request_method, request_path, 
+               status_code, response_time, user_agent
+        FROM log_entries
+        WHERE ip = ?
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+      `;
+      
+      const results = await runSqlQuery(connection, query, [ip, limit, offset]);
+      await disconnectFromDatabase(connection);
+      
+      res.json({
+        data: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
+      });
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
   } catch (error) {
     console.error('Error fetching logs by IP:', error);
     res.status(500).json({ error: 'Failed to fetch logs' });
@@ -331,15 +409,25 @@ app.get('/', (req, res) => {
   }
 });
 
-//Start cron jobs
+//Add blocking days update cron job
 function startCronJobs() {
   // Process category 9 logs every 2 minutes
-  cron.schedule('*/2 * * * *', async () => {
+  cron.schedule('*/10 * * * *', async () => {
     console.log('Running category 9 log processing...');
     try {
       await logProcessor.processCategory9Logs();
     } catch (error) {
       console.error('Error in cron job:', error);
+    }
+  });
+
+  // Update blocking days daily at 1:00 AM
+  cron.schedule('*/1 * * * *', async () => {
+    console.log('Running daily blocking days update...');
+    try {
+      await updateBlockingDays();
+    } catch (error) {
+      console.error('Error in blocking days update cron job:', error);
     }
   });
 
@@ -354,7 +442,7 @@ app.listen(PORT, async () => {
   console.log(`Server is running on http://localhost:${PORT}`);
   // Initialize database and start cron jobs
   await initializeApp();
-  // startCronJobs();
+  startCronJobs();
 });
 
 module.exports = app;

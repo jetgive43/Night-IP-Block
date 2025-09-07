@@ -98,18 +98,23 @@
         .panel {
             background: white;
             border-radius: 10px;
-            padding: 15px;
+            padding: 20px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            overflow-y: auto;
+            overflow: hidden;
         }
 
         .panel h3 {
             color: #667eea;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
             font-size: 1.1rem;
             border-bottom: 2px solid #f0f0f0;
-            padding-bottom: 8px;
-            font-weight: 600;
+            padding-bottom: 10px;
+        }
+
+        .panel-content {
+            max-height: 300px;
+            overflow-y: auto;
+            padding-right: 10px;
         }
 
         /* Country panel */
@@ -345,6 +350,39 @@
         .logout-btn:hover {
             background: #c82333;
         }
+
+        /* Loading indicators */
+        .loading-more {
+            text-align: center;
+            padding: 10px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .load-more-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .load-more-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .load-more-btn:hover {
+            background: #5a6fd8;
+        }
+
+        .load-more-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -418,6 +456,23 @@
         let selectedCountry = null;
         let selectedASN = null;
         let selectedIP = null;
+        
+        // Pagination state
+        let ipPagination = {
+          page: 1,
+          limit: 50,
+          total: 0,
+          hasNext: false,
+          loading: false
+        };
+        
+        let logPagination = {
+          page: 1,
+          limit: 50,
+          total: 0,
+          hasNext: false,
+          loading: false
+        };
 
         // Environment variables (from .env file)
         const START_TIME = 2; // Default values, should match server-side
@@ -616,7 +671,18 @@
             // Update selection state
             clearSelections();
             selectedCountry = countryCode;
+            selectedASN = null;
+            selectedIP = null;
             currentView = 'country';
+            
+            // Reset pagination state
+            ipPagination = {
+              page: 1,
+              limit: 50,
+              total: 0,
+              hasNext: false,
+              loading: false
+            };
             
             // Highlight selected country
             const countryItems = document.querySelectorAll('.country-item');
@@ -626,35 +692,144 @@
                 }
             });
             
-            try {
-                const response = await fetch(`/api/ips/country/${countryCode}`);
-                const ips = await response.json();
-                
-                const ipList = document.getElementById('ipList');
-                if (ips.length === 0) {
-                    ipList.innerHTML = '<div class="loading">No IPs found for this country</div>';
-                    return;
-                }
+            await loadIPsForCountry(countryCode);
+        }
 
-                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ${countryCode.toUpperCase()}</h4>`;
-                ips.forEach(ip => {
-                    console.log(ip.is_whitelisted ? ip.ip : '');
-                });
-                ips.forEach(ip => {
-                    html += `
-                        <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
-                            <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
-                                ${ip.is_whitelisted ? '-' : '+'}
+        async function loadIPsForCountry(countryCode, loadMore = false) {
+            if (ipPagination.loading) return;
+            
+            const ipList = document.getElementById('ipList');
+            
+            if (!loadMore) {
+                // Initial load
+                ipList.innerHTML = '<div class="loading">Loading IPs...</div>';
+                ipPagination.page = 1;
+            } else {
+                // Load more - show loading indicator
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-more';
+                loadingDiv.innerHTML = 'Loading more IPs...';
+                ipList.appendChild(loadingDiv);
+            }
+            
+            ipPagination.loading = true;
+            
+            try {
+                const response = await fetch(`/api/ips/country/${countryCode}?page=${ipPagination.page}&limit=${ipPagination.limit}`);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to load IPs');
+                }
+                
+                // Update pagination state
+                ipPagination = {
+                  ...ipPagination,
+                  ...result.pagination,
+                  loading: false
+                };
+                
+                if (!loadMore) {
+                    // Initial load
+                    let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ${countryCode.toUpperCase()}</h4>`;
+                    
+                    if (result.data.length === 0) {
+                        html += '<div class="loading">No IPs found for this country</div>';
+                    } else {
+                        result.data.forEach(ip => {
+                            html += `
+                                <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
+                                    <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                        ${ip.is_whitelisted ? '-' : '+'}
+                                    </button>
+                                    <span>${ip.ip}</span>
+                                    <span>${ip.blocking_days || 0} days blocked</span>
+                                    <span>${ip.request_count}</span>
+                                </div>
+                            `;
+                        });
+                        
+                        // Add load more button if there are more pages
+                        if (ipPagination.hasNext) {
+                            html += `
+                                <div class="load-more-container" style="text-align: center; margin-top: 10px;">
+                                    <button class="load-more-btn" onclick="loadMoreIPs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        Load More IPs
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    ipList.innerHTML = html;
+                } else {
+                    // Load more - append to existing list
+                    const existingContent = ipList.innerHTML;
+                    const loadMoreContainer = ipList.querySelector('.load-more-container');
+                    if (loadMoreContainer) {
+                        loadMoreContainer.remove();
+                    }
+                    
+                    let newHtml = '';
+                    result.data.forEach(ip => {
+                        newHtml += `
+                            <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
+                                <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                    ${ip.is_whitelisted ? '-' : '+'}
+                                </button>
+                                <span>${ip.ip}</span>
+                                <span>${ip.blocking_days || 0} days blocked</span>
+                                <span>${ip.request_count}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    // Remove loading indicator
+                    const loadingDiv = ipList.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.remove();
+                    }
+                    
+                    // Append new content
+                    ipList.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    
+                    // Add load more button if there are more pages
+                    if (ipPagination.hasNext) {
+                        const loadMoreBtn = document.createElement('div');
+                        loadMoreBtn.className = 'load-more-container';
+                        loadMoreBtn.style.cssText = 'text-align: center; margin-top: 10px;';
+                        loadMoreBtn.innerHTML = `
+                            <button class="load-more-btn" onclick="loadMoreIPs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Load More IPs
                             </button>
-                            <span>${ip.ip}</span>
-                            <span>${ip.blocking_days} days  blocked</span>
-                            <span>${ip.request_count}</span>
-                        </div>
-                    `;
-                });
-                ipList.innerHTML = html;
+                        `;
+                        ipList.appendChild(loadMoreBtn);
+                    }
+                }
             } catch (error) {
-                document.getElementById('ipList').innerHTML = '<div class="error">Failed to load IPs</div>';
+                console.error('Error loading IPs:', error);
+                if (!loadMore) {
+                    ipList.innerHTML = '<div class="error">Failed to load IPs</div>';
+                } else {
+                    // Remove loading indicator and show error
+                    const loadingDiv = ipList.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = 'Failed to load more IPs';
+                        loadingDiv.className = 'error';
+                    }
+                }
+            }
+            
+            ipPagination.loading = false;
+        }
+
+        async function loadMoreIPs() {
+            if (currentView === 'country' && selectedCountry) {
+                ipPagination.page++;
+                await loadIPsForCountry(selectedCountry, true);
+            } else if (currentView === 'asn' && selectedASN) {
+                ipPagination.page++;
+                await loadIPsForASN(selectedASN, true);
             }
         }
 
@@ -662,7 +837,18 @@
             // Update selection state
             clearSelections();
             selectedASN = asn;
+            selectedCountry = null;
+            selectedIP = null;
             currentView = 'asn';
+            
+            // Reset pagination state
+            ipPagination = {
+              page: 1,
+              limit: 50,
+              total: 0,
+              hasNext: false,
+              loading: false
+            };
             
             // Highlight selected ASN
             const asnItems = document.querySelectorAll('.asn-item');
@@ -672,30 +858,127 @@
                 }
             });
             
-            try {
-                const response = await fetch(`/api/ips/asn/${asn}`);
-                const ips = await response.json();
-                
-                const ipList = document.getElementById('ipList');
-                if (ips.length === 0) {
-                    ipList.innerHTML = '<div class="loading">No IPs found for this ASN</div>';
-                    return;
-                }
+            await loadIPsForASN(asn);
+        }
 
-                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ASN ${asn}</h4>`;
-                ips.forEach(ip => {
-                    html += `
-                        <div class="ip-item" onclick="selectIP('${ip.ip}')">
-                            <span>${ip.ip}</span>
-                            <span>${ip.request_count}</span>
-                        </div>
-                    `;
-                });
-                ipList.innerHTML = html;
+        async function loadIPsForASN(asn, loadMore = false) {
+            if (ipPagination.loading) return;
+            
+            const ipList = document.getElementById('ipList');
+            
+            if (!loadMore) {
+                // Initial load
+                ipList.innerHTML = '<div class="loading">Loading IPs...</div>';
+                ipPagination.page = 1;
+            } else {
+                // Load more - show loading indicator
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-more';
+                loadingDiv.innerHTML = 'Loading more IPs...';
+                ipList.appendChild(loadingDiv);
+            }
+            
+            ipPagination.loading = true;
+            
+            try {
+                const response = await fetch(`/api/ips/asn/${asn}?page=${ipPagination.page}&limit=${ipPagination.limit}`);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to load IPs');
+                }
+                
+                // Update pagination state
+                ipPagination = {
+                  ...ipPagination,
+                  ...result.pagination,
+                  loading: false
+                };
+                
+                if (!loadMore) {
+                    // Initial load
+                    let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">IPs for ASN ${asn}</h4>`;
+                    
+                    if (result.data.length === 0) {
+                        html += '<div class="loading">No IPs found for this ASN</div>';
+                    } else {
+                        result.data.forEach(ip => {
+                            html += `
+                                <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                                    <span>${ip.ip}</span>
+                                    <span>${ip.request_count}</span>
+                                </div>
+                            `;
+                        });
+                        
+                        // Add load more button if there are more pages
+                        if (ipPagination.hasNext) {
+                            html += `
+                                <div class="load-more-container" style="text-align: center; margin-top: 10px;">
+                                    <button class="load-more-btn" onclick="loadMoreIPs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        Load More IPs
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    ipList.innerHTML = html;
+                } else {
+                    // Load more - append to existing list
+                    const existingContent = ipList.innerHTML;
+                    const loadMoreContainer = ipList.querySelector('.load-more-container');
+                    if (loadMoreContainer) {
+                        loadMoreContainer.remove();
+                    }
+                    
+                    let newHtml = '';
+                    result.data.forEach(ip => {
+                        newHtml += `
+                            <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                                <span>${ip.ip}</span>
+                                <span>${ip.request_count}</span>
+                            </div>
+                        `;
+                    });
+                    
+                    // Remove loading indicator
+                    const loadingDiv = ipList.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.remove();
+                    }
+                    
+                    // Append new content
+                    ipList.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    
+                    // Add load more button if there are more pages
+                    if (ipPagination.hasNext) {
+                        const loadMoreBtn = document.createElement('div');
+                        loadMoreBtn.className = 'load-more-container';
+                        loadMoreBtn.style.cssText = 'text-align: center; margin-top: 10px;';
+                        loadMoreBtn.innerHTML = `
+                            <button class="load-more-btn" onclick="loadMoreIPs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Load More IPs
+                            </button>
+                        `;
+                        ipList.appendChild(loadMoreBtn);
+                    }
+                }
             } catch (error) {
                 console.error('Error loading IPs for ASN:', error);
-                document.getElementById('ipList').innerHTML = '<div class="error">Failed to load IPs</div>';
+                if (!loadMore) {
+                    ipList.innerHTML = '<div class="error">Failed to load IPs</div>';
+                } else {
+                    // Remove loading indicator and show error
+                    const loadingDiv = ipList.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = 'Failed to load more IPs';
+                        loadingDiv.className = 'error';
+                    }
+                }
             }
+            
+            ipPagination.loading = false;
         }
 
         async function selectIP(ip) {
@@ -711,44 +994,167 @@
                 }
             });
             
-            try {
-                const response = await fetch(`/api/logs/ip/${ip}`);
-                const logs = await response.json();
-                
-                const logContent = document.getElementById('logContent');
-                if (logs.length === 0) {
-                    logContent.innerHTML = '<div class="loading">No logs found for this IP</div>';
-                    return;
-                }
+            // Reset log pagination state
+            logPagination = {
+              page: 1,
+              limit: 50,
+              total: 0,
+              hasNext: false,
+              loading: false
+            };
+            
+            await loadLogsForIP(ip);
+        }
 
-                let html = `
-                    <h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>
-                `;
-                logs.forEach(log => {
-                    const timestamp = new Date(log.timestamp).toLocaleString();
-                    html += `
-                        <div class="log-entry">
-                            <div class="ip">${log.ip}</div>
-                            <div class="details">
-                                <strong>Time:</strong> ${timestamp} | 
-                                <strong>Domain:</strong> ${log.domain} | 
-                                <strong>Method:</strong> ${log.request_method} | 
-                                <strong>Path:</strong> ${log.request_path} | 
-                                <strong>Status:</strong> ${log.status_code} | 
-                                <strong>Response Time:</strong> ${log.response_time}s
+        async function loadLogsForIP(ip, loadMore = false) {
+            if (logPagination.loading) return;
+            
+            const logContent = document.getElementById('logContent');
+            
+            if (!loadMore) {
+                // Initial load
+                logContent.innerHTML = '<div class="loading">Loading logs...</div>';
+                logPagination.page = 1;
+            } else {
+                // Load more - show loading indicator
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading-more';
+                loadingDiv.innerHTML = 'Loading more logs...';
+                logContent.appendChild(loadingDiv);
+            }
+            
+            logPagination.loading = true;
+            
+            try {
+                const response = await fetch(`/api/logs/ip/${ip}?page=${logPagination.page}&limit=${logPagination.limit}`);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to load logs');
+                }
+                
+                // Update pagination state
+                logPagination = {
+                  ...logPagination,
+                  ...result.pagination,
+                  loading: false
+                };
+                
+                if (!loadMore) {
+                    // Initial load
+                    let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">Logs for ${ip}</h4>`;
+                    
+                    if (result.data.length === 0) {
+                        html += '<div class="loading">No logs found for this IP</div>';
+                    } else {
+                        result.data.forEach(log => {
+                            const timestamp = new Date(log.timestamp).toLocaleString();
+                            html += `
+                                <div class="log-entry">
+                                    <div class="ip">${log.ip}</div>
+                                    <div class="details">
+                                        <strong>Time:</strong> ${timestamp} | 
+                                        <strong>Domain:</strong> ${log.domain} | 
+                                        <strong>Method:</strong> ${log.request_method} | 
+                                        <strong>Path:</strong> ${log.request_path} | 
+                                        <strong>Status:</strong> ${log.status_code} | 
+                                        <strong>Response Time:</strong> ${log.response_time}s
+                                    </div>
+                                    <div class="details" style="margin-top: 4px;">
+                                        <strong>User Agent:</strong> ${log.user_agent}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        // Add load more button if there are more pages
+                        if (logPagination.hasNext) {
+                            html += `
+                                <div class="load-more-container" style="text-align: center; margin-top: 10px;">
+                                    <button class="load-more-btn" onclick="loadMoreLogs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        Load More Logs
+                                    </button>
+                                </div>
+                            `;
+                        }
+                    }
+                    
+                    logContent.innerHTML = html;
+                } else {
+                    // Load more - append to existing list
+                    const existingContent = logContent.innerHTML;
+                    const loadMoreContainer = logContent.querySelector('.load-more-container');
+                    if (loadMoreContainer) {
+                        loadMoreContainer.remove();
+                    }
+                    
+                    let newHtml = '';
+                    result.data.forEach(log => {
+                        const timestamp = new Date(log.timestamp).toLocaleString();
+                        newHtml += `
+                            <div class="log-entry">
+                                <div class="ip">${log.ip}</div>
+                                <div class="details">
+                                    <strong>Time:</strong> ${timestamp} | 
+                                    <strong>Domain:</strong> ${log.domain} | 
+                                    <strong>Method:</strong> ${log.request_method} | 
+                                    <strong>Path:</strong> ${log.request_path} | 
+                                    <strong>Status:</strong> ${log.status_code} | 
+                                    <strong>Response Time:</strong> ${log.response_time}s
+                                </div>
+                                <div class="details" style="margin-top: 4px;">
+                                    <strong>User Agent:</strong> ${log.user_agent}
+                                </div>
                             </div>
-                            <div class="details" style="margin-top: 4px;">
-                                <strong>User Agent:</strong> ${log.user_agent}
-                            </div>
-                        </div>
-                    `;
-                });
-                logContent.innerHTML = html;
+                        `;
+                    });
+                    
+                    // Remove loading indicator
+                    const loadingDiv = logContent.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.remove();
+                    }
+                    
+                    // Append new content
+                    logContent.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    
+                    // Add load more button if there are more pages
+                    if (logPagination.hasNext) {
+                        const loadMoreBtn = document.createElement('div');
+                        loadMoreBtn.className = 'load-more-container';
+                        loadMoreBtn.style.cssText = 'text-align: center; margin-top: 10px;';
+                        loadMoreBtn.innerHTML = `
+                            <button class="load-more-btn" onclick="loadMoreLogs()" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                Load More Logs
+                            </button>
+                        `;
+                        logContent.appendChild(loadMoreBtn);
+                    }
+                }
             } catch (error) {
                 console.error('Error loading logs for IP:', error);
-                document.getElementById('logContent').innerHTML = '<div class="error">Failed to load logs</div>';
+                if (!loadMore) {
+                    logContent.innerHTML = '<div class="error">Failed to load logs</div>';
+                } else {
+                    // Remove loading indicator and show error
+                    const loadingDiv = logContent.querySelector('.loading-more');
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = 'Failed to load more logs';
+                        loadingDiv.className = 'error';
+                    }
+                }
+            }
+            
+            logPagination.loading = false;
+        }
+
+        async function loadMoreLogs() {
+            if (selectedIP) {
+                logPagination.page++;
+                await loadLogsForIP(selectedIP, true);
             }
         }
+
         async function whitelistIP(ip) {
             try {
                 const response = await fetch('/api/whitelist', {
@@ -834,6 +1240,45 @@
                 window.location.href = '/login';
             }
         }
+
+        // Infinite scroll functionality
+        function setupInfiniteScroll() {
+            const ipPanel = document.querySelector('.ip-panel');
+            const logPanel = document.querySelector('.log-panel');
+            
+            // IP panel scroll listener
+            ipPanel.addEventListener('scroll', () => {
+                const scrollTop = ipPanel.scrollTop;
+                const scrollHeight = ipPanel.scrollHeight;
+                const clientHeight = ipPanel.clientHeight;
+                
+                // Check if scrolled to bottom (with 100px buffer)
+                if (scrollTop + clientHeight >= scrollHeight - 100) {
+                    if (ipPagination.hasNext && !ipPagination.loading) {
+                       loadMoreIPs();
+                    }
+                }
+            });
+            
+            // Log panel scroll listener
+            logPanel.addEventListener('scroll', () => {
+                const scrollTop = logPanel.scrollTop;
+                const scrollHeight = logPanel.scrollHeight;
+                const clientHeight = logPanel.clientHeight;
+                
+                // Check if scrolled to bottom (with 100px buffer)
+                if (scrollTop + clientHeight >= scrollHeight - 100) {
+                    if (logPagination.hasNext && !logPagination.loading) {
+                        loadMoreLogs();
+                    }
+                }
+            });
+        }
+
+        // Call setupInfiniteScroll when page loads
+        window.addEventListener('load', () => {
+            setupInfiniteScroll();
+        });
     </script>
 </body>
 </html> 

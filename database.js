@@ -2,62 +2,36 @@ const mysql = require("mysql2/promise");
 require("dotenv").config();
 const { exec } = require("child_process");
 
+const dbConfig = {
+  host: process.env.DATABASE_HOST || 'localhost',
+  user: process.env.DATABASE_USER || 'root',
+  password: process.env.DATABASE_PASSWORD || '',
+  database: process.env.DATABASE_DB || 'night_ip_block',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+};
+
+const pool = mysql.createPool(dbConfig);
+
 exports.connectToDatabase = async () => {
+  return await pool.getConnection();
+};
+
+exports.runSqlQuery = async (connection, query, params = []) => {
   try {
-    const connection = await mysql.createConnection({
-      host: process.env.DATABASE_HOST ?? "localhost",
-      user: process.env.DATABASE_USER ?? "root",
-      password: process.env.DATABASE_PASSWORD ?? "",
-      database: process.env.DATABASE_DB ?? "",
-      connectTimeout: 30000,
-      connectionLimit: 300,
-    });
-    // console.log("Connected to the database successfully.");
-    return connection;
+    const [rows] = await connection.execute(query, params);
+    return rows;
   } catch (error) {
-    console.error("Error connecting to the database:", error);
+    console.error('Database query error:', error);
     throw error;
   }
 };
 
 exports.disconnectFromDatabase = async (connection) => {
-  try {
-    await connection.end();
-    // console.log("Disconnected from the database successfully.");
-  } catch (error) {
-    console.error("Error disconnecting from the database:", error);
-    // throw error;
+  if (connection) {
+    connection.release();
   }
-};
-
-exports.runSqlQuery = async (connection, query, params = []) => {
-  try {
-    const [results] = await connection.execute(query, params);
-    return results;
-  } catch (error) {
-    console.error("Error executing SQL query:", error);
-    if (JSON.stringify(error).includes("Too many connections")) {
-      this.restartMySQLService();
-    }
-    throw error;
-  }
-};
-
-exports.restartMySQLService = () => {
-  return new Promise((resolve, reject) => {
-    exec("sudo service mysql restart", (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error restarting MySQL service: ${error}`);
-        reject(error);
-        return;
-      }
-      if (stderr) {
-        console.error(`MySQL restart stderr: ${stderr}`);
-      }
-      console.log(`MySQL service restarted successfully: ${stdout}`);
-      resolve(stdout);
-    });
-  });
 };
 
 exports.createTables = async () => {
@@ -72,6 +46,7 @@ exports.createTables = async () => {
         asn VARCHAR(50),
         request_count INT DEFAULT 0,
         is_blocked TINYINT DEFAULT 0,
+        blocking_days INT DEFAULT 0,
         last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY unique_ip (ip)
@@ -140,6 +115,86 @@ exports.createTables = async () => {
     console.log("Database tables created successfully");
   } catch (error) {
     console.error("Error creating tables:", error);
+    throw error;
+  } finally {
+    await this.disconnectFromDatabase(connection);
+  }
+};
+
+// Add blocking_days column to existing blocked_ips table
+exports.addBlockingDaysColumn = async () => {
+  const connection = await this.connectToDatabase();
+  try {
+    // Check if blocking_days column exists
+    const checkColumnQuery = `
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'blocked_ips' 
+      AND COLUMN_NAME = 'blocking_days'
+    `;
+    
+    const columnExists = await this.runSqlQuery(connection, checkColumnQuery);
+    
+    if (columnExists.length === 0) {
+      // Add the blocking_days column
+      const addColumnQuery = `
+        ALTER TABLE blocked_ips 
+        ADD COLUMN blocking_days INT DEFAULT 0 AFTER is_blocked
+      `;
+      await this.runSqlQuery(connection, addColumnQuery);
+      console.log("Added blocking_days column to blocked_ips table");
+    } else {
+      console.log("blocking_days column already exists");
+    }
+  } catch (error) {
+    console.error("Error adding blocking_days column:", error);
+    throw error;
+  } finally {
+    await this.disconnectFromDatabase(connection);
+  }
+};
+
+// Calculate and update blocking days for all IPs
+exports.updateBlockingDays = async () => {
+  const connection = await this.connectToDatabase();
+  try {
+    console.log("Starting blocking days update...");
+    
+    // Get all unique IPs from blocked_ips table
+    const getIPsQuery = `
+      SELECT ip FROM blocked_ips
+    `;
+    const ips = await this.runSqlQuery(connection, getIPsQuery);
+    
+    console.log(`Found ${ips.length} IPs to update blocking days for`);
+    
+    for (const ipRecord of ips) {
+      const ip = ipRecord.ip;
+      
+      // Count distinct days for this IP in log_entries
+      const countDaysQuery = `
+        SELECT COUNT(DISTINCT DATE(timestamp)) as days_count
+        FROM log_entries 
+        WHERE ip = ?
+      `;
+      
+      const result = await this.runSqlQuery(connection, countDaysQuery, [ip]);
+      const blockingDays = result[0].days_count || 0;
+      
+      // Update the blocking_days field
+      const updateQuery = `
+        UPDATE blocked_ips 
+        SET blocking_days = ? 
+        WHERE ip = ?
+      `;
+      
+      await this.runSqlQuery(connection, updateQuery, [blockingDays, ip]);
+    }
+    
+    console.log("Blocking days update completed successfully");
+  } catch (error) {
+    console.error("Error updating blocking days:", error);
     throw error;
   } finally {
     await this.disconnectFromDatabase(connection);
