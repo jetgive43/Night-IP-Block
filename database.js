@@ -160,8 +160,6 @@ exports.updateBlockingDays = async () => {
   const connection = await this.connectToDatabase();
   try {
     console.log("Starting blocking days update...");
-    
-    // Get all unique IPs from blocked_ips table
     const getIPsQuery = `
       SELECT ip FROM blocked_ips
     `;
@@ -172,7 +170,6 @@ exports.updateBlockingDays = async () => {
     for (const ipRecord of ips) {
       const ip = ipRecord.ip;
       
-      // Count distinct days for this IP in log_entries
       const countDaysQuery = `
         SELECT COUNT(DISTINCT DATE(timestamp)) as days_count
         FROM log_entries 

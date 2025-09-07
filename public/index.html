@@ -1051,17 +1051,14 @@
                             const timestamp = new Date(log.timestamp).toLocaleString();
                             html += `
                                 <div class="log-entry">
-                                    <div class="ip">${log.ip}</div>
                                     <div class="details">
-                                        <strong>Time:</strong> ${timestamp} | 
-                                        <strong>Domain:</strong> ${log.domain} | 
-                                        <strong>Method:</strong> ${log.request_method} | 
-                                        <strong>Path:</strong> ${log.request_path} | 
+                                        <strong>${timestamp} | 
+                                        <strong></strong> ${log.domain} | 
+                                        <strong></strong> ${log.request_method} | 
                                         <strong>Status:</strong> ${log.status_code} | 
-                                        <strong>Response Time:</strong> ${log.response_time}s
-                                    </div>
-                                    <div class="details" style="margin-top: 4px;">
                                         <strong>User Agent:</strong> ${log.user_agent}
+                                        <strong>Response Time:</strong> ${log.response_time}s
+                                        <strong></strong> ${log.request_path} | 
                                     </div>
                                 </div>
                             `;
