@@ -422,7 +422,7 @@ function startCronJobs() {
   });
 
   // Update blocking days daily at 1:00 AM
-  cron.schedule('*/1 * * * *', async () => {
+  cron.schedule('0 1 * * *', async () => {
     console.log('Running daily blocking days update...');
     try {
       await updateBlockingDays();
