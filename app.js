@@ -538,7 +538,8 @@ app.get('/api/logs/ip-domain/:ip/:domain', async (req, res) => {
         ORDER BY timestamp DESC
         LIMIT ? OFFSET ?
       `;
-      const results = await runSqlQuery(connection, query, [ip, `%${domain}%`, limit, offset]);
+      const results = await runSqlQuery(connection, query, [ip, `%${domain}`, limit, offset]);
+      await disconnectFromDatabase(connection);
       res.json({
         data: results,
         pagination: {

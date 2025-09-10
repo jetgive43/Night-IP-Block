@@ -264,7 +264,7 @@
         </div>
 
         <div class="logs-section">
-            <h3>Log Entries</h3>
+            <h3>Log Entries <span id="logCount"></span></h3>
             <div class="log-entries" id="logEntries">
                 <div class="no-logs">No logs loaded yet. Check an IP and investigate a domain to view logs.</div>
             </div>
@@ -362,7 +362,7 @@
             if (logPagination.loading) return;
 
             const logEntries = document.getElementById('logEntries');
-            
+            const logCount = document.getElementById('logCount');
             if (!loadMore) {
                 logEntries.innerHTML = '<div class="loading">Loading logs...</div>';
                 logPagination.page = 1;
@@ -394,8 +394,10 @@
                     // Initial load
                     if (result.data.length === 0) {
                         logEntries.innerHTML = '<div class="no-logs">No logs found for this IP and domain combination</div>';
+                        logCount.innerHTML = '';
                     } else {
                         let html = '';
+                        logCount.innerHTML = `Total: ${result.pagination.total}`;
                         result.data.forEach(log => {
                             const timestamp = new Date(log.timestamp).toLocaleString();
                             html += `
