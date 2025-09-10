@@ -13,7 +13,7 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #cfcfcf 0%, #c1c1c1 100%);
             min-height: 100vh;
             color: #333;
         }
@@ -478,8 +478,8 @@
             <!-- Middle panel - IP list -->
             <div class="ip-panel">
                 <h3>📱 IP List</h3>
-                <form id="ipForm" class="ip-search-form">
-                    <input type="text" id="ipInput" placeholder="Enter IP address to search" style="margin-top: 20px" class="ip-search-input">
+                <form id="ipForm" class="ip-search-form"  style="margin-top: 20px">
+                    <input type="text" id="ipInput" placeholder="Enter IP address to search" class="ip-search-input">
                     <button type="button" id="clearSearchBtn" onclick="clearIPSearch()" class="clear-search-btn">Clear</button>
                 </form>
                 <div id="ipList" class="loading">Select a country or ASN to view IPs</div>
