@@ -233,6 +233,16 @@
             line-height: 1.4;
         }
 
+        #countryList {
+            height: 90%;
+            overflow-y: auto;
+        }
+
+        #asnList {
+            height: 90%;
+            overflow-y: auto;
+        }
+
         .loading {
             text-align: center;
             padding: 15px;
@@ -764,25 +774,11 @@
                     ipList.innerHTML = html;
                 } else {
                     // Load more - append to existing list
-                    const existingContent = ipList.innerHTML;
+                    // Remove existing load more button
                     const loadMoreContainer = ipList.querySelector('.load-more-container');
                     if (loadMoreContainer) {
                         loadMoreContainer.remove();
                     }
-                    
-                    let newHtml = '';
-                    result.data.forEach(ip => {
-                        newHtml += `
-                            <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
-                                <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
-                                    ${ip.is_whitelisted ? '-' : '+'}
-                                </button>
-                                <span>${ip.ip}</span>
-                                <span>${ip.blocking_days || 0} days blocked</span>
-                                <span>${ip.request_count}</span>
-                            </div>
-                        `;
-                    });
                     
                     // Remove loading indicator
                     const loadingDiv = ipList.querySelector('.loading-more');
@@ -790,8 +786,22 @@
                         loadingDiv.remove();
                     }
                     
-                    // Append new content
-                    ipList.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    // Append new IP items
+                    result.data.forEach(ip => {
+                        const ipItem = document.createElement('div');
+                        ipItem.className = 'ip-item';
+                        ipItem.style.cssText = `background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;`;
+                        ipItem.onclick = () => selectIP(ip.ip);
+                        ipItem.innerHTML = `
+                            <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                ${ip.is_whitelisted ? '-' : '+'}
+                            </button>
+                            <span>${ip.ip}</span>
+                            <span>${ip.blocking_days || 0} days blocked</span>
+                            <span>${ip.request_count}</span>
+                        `;
+                        ipList.appendChild(ipItem);
+                    });
                     
                     // Add load more button if there are more pages
                     if (ipPagination.hasNext) {
@@ -926,21 +936,11 @@
                     ipList.innerHTML = html;
                 } else {
                     // Load more - append to existing list
-                    const existingContent = ipList.innerHTML;
+                    // Remove existing load more button
                     const loadMoreContainer = ipList.querySelector('.load-more-container');
                     if (loadMoreContainer) {
                         loadMoreContainer.remove();
                     }
-                    
-                    let newHtml = '';
-                    result.data.forEach(ip => {
-                        newHtml += `
-                            <div class="ip-item" onclick="selectIP('${ip.ip}')">
-                                <span>${ip.ip}</span>
-                                <span>${ip.request_count}</span>
-                            </div>
-                        `;
-                    });
                     
                     // Remove loading indicator
                     const loadingDiv = ipList.querySelector('.loading-more');
@@ -948,8 +948,17 @@
                         loadingDiv.remove();
                     }
                     
-                    // Append new content
-                    ipList.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    // Append new IP items
+                    result.data.forEach(ip => {
+                        const ipItem = document.createElement('div');
+                        ipItem.className = 'ip-item';
+                        ipItem.onclick = () => selectIP(ip.ip);
+                        ipItem.innerHTML = `
+                            <span>${ip.ip}</span>
+                            <span>${ip.request_count}</span>
+                        `;
+                        ipList.appendChild(ipItem);
+                    });
                     
                     // Add load more button if there are more pages
                     if (ipPagination.hasNext) {
@@ -1051,14 +1060,15 @@
                             const timestamp = new Date(log.timestamp).toLocaleString();
                             html += `
                                 <div class="log-entry">
+                                    <div class="ip">${log.ip}</div>
                                     <div class="details">
-                                        <strong>${timestamp} | 
-                                        <strong></strong> ${log.domain} | 
-                                        <strong></strong> ${log.request_method} | 
-                                        <strong>Status:</strong> ${log.status_code} | 
+                                        <strong> ${timestamp} | 
+                                        <strong>${log.domain} | 
+                                        <strong>${log.request_method} | 
                                         <strong>User Agent:</strong> ${log.user_agent}
-                                        <strong>Response Time:</strong> ${log.response_time}s
-                                        <strong></strong> ${log.request_path} | 
+                                        <strong>Status:</strong> ${log.status_code} | 
+                                        <strong>${log.response_time}s
+                                        <strong>${log.request_path} | 
                                     </div>
                                 </div>
                             `;
@@ -1079,29 +1089,11 @@
                     logContent.innerHTML = html;
                 } else {
                     // Load more - append to existing list
-                    const existingContent = logContent.innerHTML;
+                    // Remove existing load more button
                     const loadMoreContainer = logContent.querySelector('.load-more-container');
                     if (loadMoreContainer) {
                         loadMoreContainer.remove();
                     }
-                    
-                    let newHtml = '';
-                    result.data.forEach(log => {
-                        const timestamp = new Date(log.timestamp).toLocaleString();
-                        newHtml += `
-                            <div class="log-entry">
-                                <div class="details">
-                                    <strong>${timestamp} | 
-                                    <strong></strong> ${log.domain} | 
-                                    <strong></strong> ${log.request_method} | 
-                                    <strong>Status:</strong> ${log.status_code} | 
-                                    <strong>User Agent:</strong> ${log.user_agent}
-                                    <strong>Response Time:</strong> ${log.response_time}s
-                                    <strong></strong> ${log.request_path} | 
-                                </div>
-                            </div>
-                        `;
-                    });
                     
                     // Remove loading indicator
                     const loadingDiv = logContent.querySelector('.loading-more');
@@ -1109,8 +1101,25 @@
                         loadingDiv.remove();
                     }
                     
-                    // Append new content
-                    logContent.innerHTML = existingContent.replace('</h4>', `</h4>${newHtml}`);
+                    // Append new log entries
+                    result.data.forEach(log => {
+                        const timestamp = new Date(log.timestamp).toLocaleString();
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        logEntry.innerHTML = `
+                            <div class="ip">${log.ip}</div>
+                            <div class="details">
+                                <strong> ${timestamp} | 
+                                <strong>${log.domain} | 
+                                <strong>${log.request_method} | 
+                                <strong>User Agent:</strong> ${log.user_agent}
+                                <strong>Status:</strong> ${log.status_code} | 
+                                <strong>Response Time:</strong> ${log.response_time}s
+                                <strong>${log.request_path} | 
+                            </div>
+                        `;
+                        logContent.appendChild(logEntry);
+                    });
                     
                     // Add load more button if there are more pages
                     if (logPagination.hasNext) {
