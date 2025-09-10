@@ -420,6 +420,12 @@
                         const logEntry = document.createElement('div');
                         logEntry.className = 'log-entry';
                         logEntry.innerHTML = `
+                            <div class="timezone-header">
+                                <div>Japan ${log.timestamp.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })}</div>
+                                <div>Spain ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/Madrid' })}</div>
+                                <div>Canada ${log.timestamp.toLocaleString('en-US', { timeZone: 'America/Toronto' })}</div>
+                                <div>UK ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/London' })}</div>
+                            </div>
                             <strong>${timestamp}</strong> | 
                             <strong>${log.domain}</strong> | 
                             <strong>${log.request_method}</strong> | 
