@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FriendMTS and Malicious IP Checker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .check-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .ip-check, .domain-check {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .ip-check h3, .domain-check h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #5a6fd8;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .result.bad {
+            background: #f8d7da;
+            color: #721c24;
+            border: 2px solid #f5c6cb;
+        }
+
+        .result.good {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+
+        .logs-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            border: 2px solid #e9ecef;
+        }
+
+        .logs-section h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+
+        .timezone-header {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .log-entries {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .log-entry {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-entry:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .no-logs {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+
+
+        .user-info {
+            position: absolute;
+            top: 20px;
+            right: 120px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        /* Scrollbar styling */
+        .log-entries::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-entries::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .log-entries::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        .log-entries::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .check-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .timezone-header {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="user-info" id="userInfo"></div>    
+    <div class="container">
+        <div class="header">
+            <h1>��️ FriendMTS and Malicious IP Checker</h1>
+        </div>
+
+        <div class="check-section">
+            <div class="ip-check">
+                <h3>IP Address Check</h3>
+                <div class="input-group">
+                    <input type="text" id="ipInput" placeholder="Enter IP address (e.g., 8.8.8.8)" value="8.8.8.8">
+                    <button class="btn" onclick="checkIP()">Check</button>
+                </div>
+                <div id="ipResult" class="result" style="display: none;"></div>
+            </div>
+
+            <div class="domain-check">
+                <h3>Domain Investigation</h3>
+                <div class="input-group">
+                    <input type="text" id="domainInput" placeholder="Enter domain (e.g., applecdn.me)" value="applecdn.me">
+                    <button class="btn" onclick="investigateDomain()">View Log</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="logs-section">
+            <h3>Log Entries</h3>
+            <div class="log-entries" id="logEntries">
+                <div class="no-logs">No logs loaded yet. Check an IP and investigate a domain to view logs.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentIP = null;
+        let currentDomain = null;
+        let logPagination = {
+            page: 1,
+            limit: 50,
+            total: 0,
+            hasNext: false,
+            loading: false
+        };
+
+        // Initialize the page
+
+        // Check if IP is blocked
+        async function checkIP() {
+            const ipInput = document.getElementById('ipInput');
+            const ip = ipInput.value.trim();
+            
+            if (!ip) {
+                alert('Please enter an IP address');
+                return;
+            }
+
+            const resultDiv = document.getElementById('ipResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading">Checking IP...</div>';
+
+            try {
+                const response = await fetch(`/api/check-ip/${ip}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    currentIP = ip;
+                    if (data.isBlocked) {
+                        resultDiv.className = 'result bad';
+                        resultDiv.innerHTML = `Bad IP: <strong>Yes</strong><br>
+                            <small>Request Count: ${data.details.request_count} | 
+                            Blocking Days: ${data.details.blocking_days || 0} | 
+                            Last Seen: ${new Date(data.details.last_seen).toLocaleString()}</small>`;
+                    } else {
+                        resultDiv.className = 'result good';
+                        resultDiv.innerHTML = `Bad IP: <strong>No</strong><br>
+                            <small>This IP is not in the blocked list</small>`;
+                    }
+                } else {
+                    throw new Error(data.error || 'Failed to check IP');
+                }
+            } catch (error) {
+                console.error('Error checking IP:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `Error: ${error.message}`;
+            }
+        }
+
+        // Investigate domain for current IP
+        async function investigateDomain() {
+            const domainInput = document.getElementById('domainInput');
+            const domain = domainInput.value.trim();
+            console.log(domain);
+            if (!domain) {
+                alert('Please enter a domain');
+                return;
+            }
+
+            if (!currentIP) {
+                alert('Please check an IP address first');
+                return;
+            }
+
+            currentDomain = domain;
+            await loadLogs();
+        }
+
+        // Load logs for IP and domain
+        async function loadLogs(loadMore = false) {
+            if (!currentIP || !currentDomain) {
+                return;
+            }
+
+            if (logPagination.loading) return;
+
+            const logEntries = document.getElementById('logEntries');
+            
+            if (!loadMore) {
+                logEntries.innerHTML = '<div class="loading">Loading logs...</div>';
+                logPagination.page = 1;
+            } else {
+                const loadingDiv = document.createElement('div');
+                loadingDiv.className = 'loading';
+                loadingDiv.innerHTML = 'Loading more logs...';
+                logEntries.appendChild(loadingDiv);
+            }
+
+            logPagination.loading = true;
+
+            try {
+                const response = await fetch(`/api/logs/ip-domain/${currentIP}/${currentDomain}?page=${logPagination.page}&limit=${logPagination.limit}`);
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to load logs');
+                }
+
+                // Update pagination state
+                logPagination = {
+                    ...logPagination,
+                    ...result.pagination,
+                    loading: false
+                };
+
+                if (!loadMore) {
+                    // Initial load
+                    if (result.data.length === 0) {
+                        logEntries.innerHTML = '<div class="no-logs">No logs found for this IP and domain combination</div>';
+                    } else {
+                        let html = '';
+                        result.data.forEach(log => {
+                            const timestamp = new Date(log.timestamp).toLocaleString();
+                            html += `
+                                <div class="log-entry">
+                                    <div class="timezone-header">
+                                        <div>Japan ${log.timestamp.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })}</div>
+                                        <div>Spain ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/Madrid' })}</div>
+                                        <div>Canada ${log.timestamp.toLocaleString('en-US', { timeZone: 'America/Toronto' })}</div>
+                                        <div>UK ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/London' })}</div>
+                                    </div>
+                                    <strong>${timestamp}</strong> | 
+                                    <strong>${log.domain}</strong> | 
+                                    <strong>${log.request_method}</strong> | 
+                                    <strong>User Agent:</strong> ${log.user_agent} | 
+                                    <strong>Status:</strong> ${log.status_code} | 
+                                    <strong>${log.response_time}s</strong> | 
+                                    <strong>${log.request_path}</strong>
+                                </div>
+                            `;
+                        });
+                        logEntries.innerHTML = html;
+                    }
+                } else {
+                    // Load more - append to existing list
+                    const loadingDiv = logEntries.querySelector('.loading');
+                    if (loadingDiv) {
+                        loadingDiv.remove();
+                    }
+
+                    result.data.forEach(log => {
+                        const timestamp = new Date(log.timestamp).toLocaleString();
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        logEntry.innerHTML = `
+                            <strong>${timestamp}</strong> | 
+                            <strong>${log.domain}</strong> | 
+                            <strong>${log.request_method}</strong> | 
+                            <strong>User Agent:</strong> ${log.user_agent} | 
+                            <strong>Status:</strong> ${log.status_code} | 
+                            <strong>${log.response_time}s</strong> | 
+                            <strong>${log.request_path}</strong>
+                        `;
+                        logEntries.appendChild(logEntry);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                if (!loadMore) {
+                    logEntries.innerHTML = '<div class="error">Failed to load logs</div>';
+                } else {
+                    const loadingDiv = logEntries.querySelector('.loading');
+                    if (loadingDiv) {
+                        loadingDiv.innerHTML = 'Failed to load more logs';
+                        loadingDiv.className = 'error';
+                    }
+                }
+            }
+
+            logPagination.loading = false;
+        }
+
+        // Setup infinite scroll
+        function setupInfiniteScroll() {
+            const logEntries = document.getElementById('logEntries');
+            
+            logEntries.addEventListener('scroll', () => {
+                const scrollTop = logEntries.scrollTop;
+                const scrollHeight = logEntries.scrollHeight;
+                const clientHeight = logEntries.clientHeight;
+                
+                // Check if scrolled to bottom (with 50px buffer)
+                if (scrollTop + clientHeight >= scrollHeight - 50) {
+                    if (logPagination.hasNext && !logPagination.loading) {
+                        logPagination.page++;
+                        loadLogs(true);
+                    }
+                }
+            });
+        }
+
+        // Setup infinite scroll when page loads
+        window.addEventListener('load', () => {
+            setupInfiniteScroll();
+        });
+
+        // Allow Enter key to trigger checks
+        document.getElementById('ipInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkIP();
+            }
+        });
+
+        document.getElementById('domainInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                investigateDomain();
+            }
+        });
+    </script>
+</body>
+</html>

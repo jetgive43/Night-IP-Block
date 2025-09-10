@@ -279,7 +279,6 @@
             background: #ccc;
             cursor: not-allowed;
         }
-
         .whitelist-btn {
             background: #28a745;
             color: white;
@@ -393,6 +392,41 @@
             background: #ccc;
             cursor: not-allowed;
         }
+
+        .clear-search-btn {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .clear-search-btn:hover {
+            background: #5a6268;
+        }
+
+        .ip-search-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .ip-search-input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .ip-search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
     </style>
 </head>
 <body>
@@ -444,6 +478,10 @@
             <!-- Middle panel - IP list -->
             <div class="ip-panel">
                 <h3>📱 IP List</h3>
+                <form id="ipForm" class="ip-search-form">
+                    <input type="text" id="ipInput" placeholder="Enter IP address to search" style="margin-top: 20px" class="ip-search-input">
+                    <button type="button" id="clearSearchBtn" onclick="clearIPSearch()" class="clear-search-btn">Clear</button>
+                </form>
                 <div id="ipList" class="loading">Select a country or ASN to view IPs</div>
             </div>
 
@@ -568,7 +606,106 @@
         document.addEventListener('DOMContentLoaded', function() {
             checkAuthStatus();
             refreshData();
+            setupIPSearch();
         });
+
+        // Setup IP search functionality
+        function setupIPSearch() {
+            const ipInput = document.getElementById('ipInput');
+            const ipForm = document.getElementById('ipForm');
+            
+            // Handle form submission
+            ipForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const searchTerm = ipInput.value.trim();
+                if (searchTerm) {
+                    searchIPs(searchTerm);
+                }
+            });
+            
+            // Handle input changes with debouncing
+            let searchTimeout;
+            ipInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                const searchTerm = ipInput.value.trim();
+                
+                if (searchTerm.length >= 3) {
+                    searchTimeout = setTimeout(() => {
+                        searchIPs(searchTerm);
+                    }, 500); // 500ms delay
+                } else if (searchTerm.length === 0) {
+                    // Clear search and show original list
+                    clearIPSearch();
+                }
+            });
+        }
+
+        // Search for IPs containing the search term
+        async function searchIPs(searchTerm) {
+            if (!selectedCountry && !selectedASN) {
+                document.getElementById('ipList').innerHTML = '<div class="loading">Please select a country or ASN first</div>';
+                return;
+            }
+
+            const ipList = document.getElementById('ipList');
+            ipList.innerHTML = '<div class="loading">Searching for IPs...</div>';
+
+            try {
+                let url;
+                if (selectedCountry) {
+                    url = `/api/ips/country/${selectedCountry}/search?q=${encodeURIComponent(searchTerm)}`;
+                } else if (selectedASN) {
+                    url = `/api/ips/asn/${selectedASN}/search?q=${encodeURIComponent(searchTerm)}`;
+                }
+
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to search IPs');
+                }
+
+                let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">
+                    Search results for "${searchTerm}" ${selectedCountry ? `in ${selectedCountry.toUpperCase()}` : `in ASN ${selectedASN}`}
+                </h4>`;
+
+                if (result.data.length === 0) {
+                    html += '<div class="loading">No IPs found matching your search</div>';
+                } else {
+                    result.data.forEach(ip => {
+                        html += `
+                            <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
+                                <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                    ${ip.is_whitelisted ? '-' : '+'}
+                                </button>
+                                <span>${ip.ip}</span>
+                                <span>${ip.blocking_days || 0} days blocked</span>
+                                <span>${ip.request_count}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+                ipList.innerHTML = html;
+            } catch (error) {
+                console.error('Error searching IPs:', error);
+                ipList.innerHTML = '<div class="error">Failed to search IPs</div>';
+            }
+        }
+
+        // Clear IP search and restore original list
+        function clearIPSearch() {
+            const ipInput = document.getElementById('ipInput');
+            ipInput.value = '';
+            
+            if (selectedCountry) {
+                loadIPsForCountry(selectedCountry);
+            } else if (selectedASN) {
+                loadIPsForASN(selectedASN);
+            } else {
+                document.getElementById('ipList').innerHTML = '<div class="loading">Select a country or ASN to view IPs</div>';
+            }
+        }
 
         async function refreshData() {
             const refreshBtn = document.getElementById('refreshBtn');
@@ -1060,7 +1197,6 @@
                             const timestamp = new Date(log.timestamp).toLocaleString();
                             html += `
                                 <div class="log-entry">
-                                    <div class="ip">${log.ip}</div>
                                     <div class="details">
                                         <strong> ${timestamp} | 
                                         <strong>${log.domain} | 
@@ -1107,7 +1243,6 @@
                         const logEntry = document.createElement('div');
                         logEntry.className = 'log-entry';
                         logEntry.innerHTML = `
-                            <div class="ip">${log.ip}</div>
                             <div class="details">
                                 <strong> ${timestamp} | 
                                 <strong>${log.domain} | 

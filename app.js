@@ -10,27 +10,20 @@ const { ipToLong } = require('./ipLookup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Load environment variables
 require('dotenv').config();
-
-// Session configuration
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: false, // Set to true if using HTTPS
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    secure: false,
+    maxAge: 24 * 60 * 60 * 1000
   }
 }));
-
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Authentication middleware
 function requireAuth(req, res, next) {
   if (req.session && req.session.authenticated) {
     return next();
@@ -218,8 +211,6 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
       `;
       const countResult = await runSqlQuery(connection, countQuery, [countryCode]);
       const total = countResult[0].total;
-      
-      // Get paginated results
       const query = `
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
         FROM blocked_ips
@@ -229,8 +220,6 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
       `;
       
       const results = await runSqlQuery(connection, query, [countryCode, limit, offset]);
-      
-      // Get whitelist status
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
       
       // Add whitelist status to results
@@ -325,8 +314,108 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   }
 });
 
+// Search IPs by country with IP string filter
+app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) => {
+  try {
+    const { countryCode } = req.params;
+    const searchTerm = req.query.q;
+    
+    if (!searchTerm) {
+      return res.status(400).json({ error: 'Search term is required' });
+    }
+    
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    
+    try {
+      const query = `
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        FROM blocked_ips
+        WHERE country_code = ? AND ip LIKE ?
+        ORDER BY request_count DESC
+        LIMIT 100
+      `;
+      
+      const results = await runSqlQuery(connection, query, [countryCode, `%${searchTerm}%`]);
+      const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
+      
+      // Add whitelist status to results
+      results.forEach(result => {
+        result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+      });
+      
+      res.json({
+        data: results,
+        pagination: {
+          page: 1,
+          limit: 100,
+          total: results.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false
+        }
+      });
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
+  } catch (error) {
+    console.error('Error searching IPs by country:', error);
+    res.status(500).json({ error: 'Failed to search IPs' });
+  }
+});
+
+// Search IPs by ASN with IP string filter
+app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
+  try {
+    const { asn } = req.params;
+    const searchTerm = req.query.q;
+    
+    if (!searchTerm) {
+      return res.status(400).json({ error: 'Search term is required' });
+    }
+    
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    
+    try {
+      const query = `
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        FROM blocked_ips
+        WHERE asn = ? AND ip LIKE ?
+        ORDER BY request_count DESC
+        LIMIT 100
+      `;
+      
+      const results = await runSqlQuery(connection, query, [asn, `%${searchTerm}%`]);
+      const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
+      
+      // Add whitelist status to results
+      results.forEach(result => {
+        result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+      });
+      
+      res.json({
+        data: results,
+        pagination: {
+          page: 1,
+          limit: 100,
+          total: results.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false
+        }
+      });
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
+  } catch (error) {
+    console.error('Error searching IPs by ASN:', error);
+    res.status(500).json({ error: 'Failed to search IPs' });
+  }
+});
+
 // Paginated logs by IP
-app.get('/api/logs/ip/:ip', requireAuth, async (req, res) => {
+app.get('/api/logs/ip/:ip', async (req, res) => {
   try {
     const { ip } = req.params;
     const page = parseInt(req.query.page) || 1;
@@ -395,12 +484,86 @@ app.get('/api/total-blocked', requireAuth, async (req, res) => {
   }
 });
 
+// Check if IP is blocked (no auth required)
+app.get('/api/check-ip/:ip', async (req, res) => {
+  try {
+    const { ip } = req.params;
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    
+    const query = `
+      SELECT b.ip, b.is_blocked, b.request_count, b.blocking_days, b.last_seen
+      FROM blocked_ips b
+      LEFT JOIN whitelist w ON b.ip = w.ip
+      WHERE b.ip = ? AND w.ip IS NULL
+    `;
+    const results = await runSqlQuery(connection, query, [ip]);
+    await disconnectFromDatabase(connection);
+    
+    const isBlocked = results.length > 0 && results[0].is_blocked === 0;
+    res.json({ 
+      ip: ip,
+      isBlocked: isBlocked,
+      details: results.length > 0 ? results[0] : null
+    });
+  } catch (error) {
+    console.error('Error checking IP:', error);
+    res.status(500).json({ error: 'Failed to check IP' });
+  }
+});
+
+app.get('/api/logs/ip-domain/:ip/:domain', async (req, res) => {
+  try {
+    const { ip, domain } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const connection = await connectToDatabase();
+    
+    try {
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM log_entries
+        WHERE ip = ? AND domain LIKE ?
+      `;
+      const countResult = await runSqlQuery(connection, countQuery, [ip, `%${domain}%`]);
+      const total = countResult[0].total;
+      const query = `
+        SELECT ip, timestamp, domain, request_method, request_path, 
+               status_code, response_time, user_agent
+        FROM log_entries
+        WHERE ip = ? AND domain LIKE ?
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+      `;
+      const results = await runSqlQuery(connection, query, [ip, `%${domain}%`, limit, offset]);
+      res.json({
+        data: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        }
+      });
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
+  } catch (error) {
+    console.error('Error fetching logs for IP and domain:', error);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 // Serve login page for unauthenticated users
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// Serve the main page (protected)
 app.get('/', (req, res) => {
   if (req.session && req.session.authenticated) {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -409,7 +572,10 @@ app.get('/', (req, res) => {
   }
 });
 
-//Add blocking days update cron job
+app.get('/ipcheck', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ipcheck.html'));
+});
+
 function startCronJobs() {
   // Process category 9 logs every 2 minutes
   cron.schedule('*/10 * * * *', async () => {
