@@ -528,7 +528,7 @@ app.get('/api/logs/ip-domain/:ip/:domain', async (req, res) => {
         FROM log_entries
         WHERE ip = ? AND domain LIKE ?
       `;
-      const countResult = await runSqlQuery(connection, countQuery, [ip, `%${domain}%`]);
+      const countResult = await runSqlQuery(connection, countQuery, [ip, `%${domain}`]);
       const total = countResult[0].total;
       const query = `
         SELECT ip, timestamp, domain, request_method, request_path, 

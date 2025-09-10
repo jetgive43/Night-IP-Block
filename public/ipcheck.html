@@ -259,6 +259,7 @@
                     <input type="text" id="domainInput" placeholder="Enter domain (e.g., applecdn.me)" value="">
                     <button class="btn" onclick="investigateDomain()">View Log</button>
                 </div>
+                <div id="domainResult" class="result" style="display: none;"></div>
             </div>
         </div>
 
@@ -328,17 +329,26 @@
         async function investigateDomain() {
             const domainInput = document.getElementById('domainInput');
             const domain = domainInput.value.trim();
-            console.log(domain);
+            const domainResult = document.getElementById('domainResult');
             if (!domain) {
-                alert('Please enter a domain');
+                domainResult.className = 'result error';
+                domainResult.style.display = 'block';
+                domainResult.innerHTML = 'Please enter a domain';
                 return;
             }
-
+            if (!domain.match(/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)) {
+                domainResult.className = 'result error';
+                domainResult.style.display = 'block';
+                domainResult.innerHTML = 'Please enter a valid domain';
+                return;
+            }
             if (!currentIP) {
-                alert('Please check an IP address first');
+                domainResult.className = 'result error';
+                domainResult.style.display = 'block';
+                domainResult.innerHTML = 'Please check an IP address first';
                 return;
             }
-
+            domainResult.style.display = 'none';
             currentDomain = domain;
             await loadLogs();
         }
