@@ -403,10 +403,10 @@
                             html += `
                                 <div class="log-entry">
                                     <div class="timezone-header">
-                                        <div>Japan ${log.timestamp.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })}</div>
-                                        <div>Spain ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/Madrid' })}</div>
-                                        <div>Canada ${log.timestamp.toLocaleString('en-US', { timeZone: 'America/Toronto' })}</div>
-                                        <div>UK ${log.timestamp.toLocaleString('en-US', { timeZone: 'Europe/London' })}</div>
+                                        <div>Japan ${new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'Asia/Tokyo', hour12: false })}</div>
+                                        <div>Spain ${new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'Europe/Madrid', hour12: false })}</div>
+                                        <div>Canada ${new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'America/Toronto', hour12: false })}</div>
+                                        <div>UK ${new Date(log.timestamp).toLocaleTimeString('en-US', { timeZone: 'Europe/London', hour12: false })}</div>
                                     </div>
                                     <strong>${timestamp}</strong> | 
                                     <strong>${log.domain}</strong> | 
