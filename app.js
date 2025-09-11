@@ -560,6 +560,232 @@ app.get('/api/logs/ip-domain/:ip/:domain', async (req, res) => {
   }
 });
 
+// MySQL Resource Monitoring endpoint
+app.get('/api/mysql/resources', requireAuth, async (req, res) => {
+  try {
+    const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    const connection = await connectToDatabase();
+    
+    try {
+      const dbName = process.env.DATABASE_DB || 'night_ip_block';
+      
+      // Initialize default values
+      let statusResults = [];
+      let variableResults = [];
+      let sizeResults = [];
+      let countResults = [];
+      
+      // Try performance_schema first, fallback to SHOW STATUS/VARIABLES
+      try {
+        // Try performance_schema queries first
+        const mysqlQueries = [
+          `SELECT 
+            VARIABLE_NAME, VARIABLE_VALUE 
+           FROM performance_schema.global_status 
+           WHERE VARIABLE_NAME IN ('Threads_running', 'Threads_connected', 'Uptime')`,
+          
+          `SELECT 
+            VARIABLE_NAME, VARIABLE_VALUE 
+           FROM performance_schema.global_variables 
+           WHERE VARIABLE_NAME IN ('innodb_buffer_pool_size', 'key_buffer_size', 'max_connections')`
+        ];
+        
+        [statusResults, variableResults] = await Promise.all([
+          runSqlQuery(connection, mysqlQueries[0]),
+          runSqlQuery(connection, mysqlQueries[1])
+        ]);
+      } catch (perfError) {
+        console.log('Performance schema not available, using SHOW commands');
+        
+        // Fallback to SHOW STATUS and SHOW VARIABLES
+        try {
+          const [statusRows, variableRows] = await Promise.all([
+            runSqlQuery(connection, `SHOW STATUS WHERE Variable_name IN ('Threads_running', 'Threads_connected', 'Uptime')`),
+            runSqlQuery(connection, `SHOW VARIABLES WHERE Variable_name IN ('innodb_buffer_pool_size', 'key_buffer_size', 'max_connections')`)
+          ]);
+          
+          // Convert to same format as performance_schema
+          statusResults = statusRows.map(row => ({
+            VARIABLE_NAME: row.Variable_name,
+            VARIABLE_VALUE: row.Value
+          }));
+          
+          variableResults = variableRows.map(row => ({
+            VARIABLE_NAME: row.Variable_name,
+            VARIABLE_VALUE: row.Value
+          }));
+        } catch (showError) {
+          console.log('SHOW commands failed, using minimal data');
+          // Set minimal default values
+          statusResults = [
+            { VARIABLE_NAME: 'Threads_running', VARIABLE_VALUE: '0' },
+            { VARIABLE_NAME: 'Threads_connected', VARIABLE_VALUE: '1' },
+            { VARIABLE_NAME: 'Uptime', VARIABLE_VALUE: '0' }
+          ];
+          variableResults = [
+            { VARIABLE_NAME: 'innodb_buffer_pool_size', VARIABLE_VALUE: '134217728' },
+            { VARIABLE_NAME: 'key_buffer_size', VARIABLE_VALUE: '8388608' },
+            { VARIABLE_NAME: 'max_connections', VARIABLE_VALUE: '151' }
+          ];
+        }
+      }
+      
+      // Get database size and table info (these should work on most MySQL versions)
+      try {
+        const [sizeRows, countRows] = await Promise.all([
+          runSqlQuery(connection, `
+            SELECT 
+              table_schema AS 'database_name',
+              ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS 'size_mb'
+            FROM information_schema.tables 
+            WHERE table_schema = ?
+            GROUP BY table_schema`, [dbName]),
+          
+          runSqlQuery(connection, `
+            SELECT 
+              COUNT(*) as table_count,
+              SUM(table_rows) as total_rows
+            FROM information_schema.tables 
+            WHERE table_schema = ?`, [dbName])
+        ]);
+        
+        sizeResults = sizeRows;
+        countResults = countRows;
+      } catch (infoError) {
+        console.log('Information schema queries failed, using defaults');
+        sizeResults = [{ database_name: dbName, size_mb: 0 }];
+        countResults = [{ table_count: 0, total_rows: 0 }];
+      }
+
+      // Get system process info for MySQL
+      let systemStats = {
+        cpu_percent: 0,
+        memory_mb: 0,
+        memory_percent: 0
+      };
+
+      try {
+        // Try to get MySQL process stats on different platforms
+        let command;
+        if (process.platform === 'win32') {
+          // Windows - get MySQL process info
+          command = `powershell "Get-Process mysql* | Select-Object CPU,WorkingSet | ConvertTo-Json"`;
+        } else {
+          // Linux/Unix - get MySQL process info
+          command = `ps aux | grep [m]ysql | awk '{cpu+=$3; mem+=$4; rss+=$6} END {print cpu","mem","rss}'`;
+        }
+
+        const { stdout } = await execAsync(command);
+        
+        if (process.platform === 'win32' && stdout.trim()) {
+          try {
+            const processData = JSON.parse(stdout);
+            const processes = Array.isArray(processData) ? processData : [processData];
+            systemStats.memory_mb = processes.reduce((sum, proc) => sum + (proc.WorkingSet || 0), 0) / 1024 / 1024;
+          } catch (e) {
+            console.log('Could not parse Windows MySQL process data');
+          }
+        } else if (stdout.trim()) {
+          const [cpu, memPercent, rss] = stdout.trim().split(',').map(parseFloat);
+          systemStats.cpu_percent = cpu || 0;
+          systemStats.memory_percent = memPercent || 0;
+          systemStats.memory_mb = (rss || 0) / 1024; // Convert KB to MB
+        }
+      } catch (error) {
+        console.log('Could not get system MySQL process stats:', error.message);
+      }
+
+      // Format the response
+      const formatResults = (results) => {
+        const formatted = {};
+        results.forEach(row => {
+          formatted[row.VARIABLE_NAME] = row.VARIABLE_VALUE;
+        });
+        return formatted;
+      };
+
+      const status = formatResults(statusResults);
+      const variables = formatResults(variableResults);
+      const dbSize = sizeResults[0] || { size_mb: 0 };
+      const dbCounts = countResults[0] || { table_count: 0, total_rows: 0 };
+
+      // Calculate buffer pool usage if available
+      let bufferPoolUsage = 0;
+      try {
+        // Try to get buffer pool usage from performance_schema first
+        let bufferPoolQuery = `SELECT 
+          VARIABLE_VALUE as pool_size
+        FROM performance_schema.global_status 
+        WHERE VARIABLE_NAME = 'Innodb_buffer_pool_bytes_data'`;
+        
+        try {
+          const poolResults = await runSqlQuery(connection, bufferPoolQuery);
+          if (poolResults.length > 0) {
+            const poolSizeBytes = parseInt(variables.innodb_buffer_pool_size || 0);
+            const usedBytes = parseInt(poolResults[0].pool_size || 0);
+            bufferPoolUsage = poolSizeBytes > 0 ? (usedBytes / poolSizeBytes * 100) : 0;
+          }
+        } catch (perfError) {
+          // Fallback to SHOW STATUS
+          try {
+            const showResults = await runSqlQuery(connection, `SHOW STATUS WHERE Variable_name = 'Innodb_buffer_pool_bytes_data'`);
+            if (showResults.length > 0) {
+              const poolSizeBytes = parseInt(variables.innodb_buffer_pool_size || 0);
+              const usedBytes = parseInt(showResults[0].Value || 0);
+              bufferPoolUsage = poolSizeBytes > 0 ? (usedBytes / poolSizeBytes * 100) : 0;
+            }
+          } catch (showError) {
+            console.log('Could not get buffer pool usage');
+          }
+        }
+      } catch (e) {
+        console.log('Could not get buffer pool usage');
+      }
+
+      const resourceData = {
+        mysql_status: {
+          uptime_seconds: parseInt(status.Uptime || 0),
+          threads_running: parseInt(status.Threads_running || 0),
+          threads_connected: parseInt(status.Threads_connected || 0),
+          max_connections: parseInt(variables.max_connections || 0)
+        },
+        memory: {
+          innodb_buffer_pool_size_mb: Math.round(parseInt(variables.innodb_buffer_pool_size || 0) / 1024 / 1024),
+          key_buffer_size_mb: Math.round(parseInt(variables.key_buffer_size || 0) / 1024 / 1024),
+          buffer_pool_usage_percent: Math.round(bufferPoolUsage * 100) / 100,
+          system_memory_mb: Math.round(systemStats.memory_mb * 100) / 100,
+          system_memory_percent: Math.round(systemStats.memory_percent * 100) / 100
+        },
+        cpu: {
+          system_cpu_percent: Math.round(systemStats.cpu_percent * 100) / 100
+        },
+        database: {
+          name: dbName,
+          size_mb: parseFloat(dbSize.size_mb || 0),
+          table_count: parseInt(dbCounts.table_count || 0),
+          total_rows: parseInt(dbCounts.total_rows || 0)
+        },
+        connections: {
+          current: parseInt(status.Threads_connected || 0),
+          max: parseInt(variables.max_connections || 0),
+          usage_percent: Math.round((parseInt(status.Threads_connected || 0) / parseInt(variables.max_connections || 1)) * 10000) / 100
+        }
+      };
+
+      res.json(resourceData);
+    } finally {
+      await disconnectFromDatabase(connection);
+    }
+  } catch (error) {
+    console.error('Error fetching MySQL resources:', error);
+    res.status(500).json({ error: 'Failed to fetch MySQL resources' });
+  }
+});
+
 // Serve login page for unauthenticated users
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));

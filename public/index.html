@@ -427,17 +427,87 @@
             border-color: #667eea;
             box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
         }
+
+        /* Resource monitoring styles */
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .resource-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .resource-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .resource-card h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .resource-value {
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .resource-detail {
+            font-size: 0.8rem;
+            color: #666;
+            margin-bottom: 3px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.low {
+            background: #28a745;
+        }
+
+        .progress-fill.medium {
+            background: #ffc107;
+        }
+
+        .progress-fill.high {
+            background: #dc3545;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🛡️ Night IP Block Dashboard</h1>
+            <h1>Night IP Block Dashboard</h1>
             <p>Real-time IP blocking and monitoring dashboard</p>
             <div style="position: absolute; top: 20px; right: 20px;">
                 <span id="userInfo" style="color: white; margin-right: 15px;"></span>
                 <button class="logout-btn" onclick="logout()">
-                    🚪 Logout
+                    Logout
                 </button>
             </div>
         </div>
@@ -460,9 +530,49 @@
             </div>
         </div>
 
-        <!-- Main three-part grid -->
+        <!-- MySQL Resource Monitoring -->
+        <div class="resource-grid" id="resourceGrid" style="display: none;">
+            <div class="resource-card">
+                <h4>MySQL CPU Usage</h4>
+                <div class="resource-value" id="mysqlCpu">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cpuProgress" style="width: 0%"></div>
+                </div>
+                <div class="resource-detail" id="cpuDetail">System CPU usage by MySQL process</div>
+            </div>
+
+            <div class="resource-card">
+                <h4>MySQL Memory</h4>
+                <div class="resource-value" id="mysqlMemory">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="memoryProgress" style="width: 0%"></div>
+                </div>
+                <div class="resource-detail" id="memoryDetail">Buffer Pool: - | System: -</div>
+            </div>
+
+            <div class="resource-card">
+                <h4>Database Size</h4>
+                <div class="resource-value" id="dbSize">-</div>
+                <div class="resource-detail" id="dbDetail">Tables: - | Rows: -</div>
+            </div>
+
+            <div class="resource-card">
+                <h4>Connections</h4>
+                <div class="resource-value" id="connections">-</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="connectionProgress" style="width: 0%"></div>
+                </div>
+                <div class="resource-detail" id="connectionDetail">Active: - / Max: -</div>
+            </div>
+
+            <div class="resource-card">
+                <h4>MySQL Uptime</h4>
+                <div class="resource-value" id="uptime">-</div>
+                <div class="resource-detail" id="uptimeDetail">Running threads: -</div>
+            </div>
+        </div>
+
         <div class="main-grid">
-            <!-- Left side - Country and ASN panels -->
             <div class="left-panels">
                 <div class="panel country-panel">
                     <h3>🌍 Countries</h3>
@@ -475,7 +585,6 @@
                 </div>
             </div>
 
-            <!-- Middle panel - IP list -->
             <div class="ip-panel">
                 <h3>📱 IP List</h3>
                 <form id="ipForm" class="ip-search-form"  style="margin-top: 20px">
@@ -485,7 +594,6 @@
                 <div id="ipList" class="loading">Select a country or ASN to view IPs</div>
             </div>
 
-            <!-- Right panel - Log content -->
             <div class="log-panel">
                 <h3>📋 Log Content</h3>
                 <div id="logContent" class="loading">Select an IP address to view logs</div>
@@ -716,7 +824,8 @@
                 await Promise.all([
                     loadTotalBlocked(),
                     loadCountries(),
-                    loadASNs()
+                    loadASNs(),
+                    loadMySQLResources() // Add this line
                 ]);
             } catch (error) {
                 console.error('Error refreshing data:', error);
@@ -1417,6 +1526,80 @@
         window.addEventListener('load', () => {
             setupInfiniteScroll();
         });
+
+        // Add this function to load MySQL resources
+        async function loadMySQLResources() {
+            try {
+                const response = await fetch('/api/mysql/resources');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateResourceDisplay(data);
+                    document.getElementById('resourceGrid').style.display = 'grid';
+                } else {
+                    console.error('Error loading MySQL resources:', data.error);
+                }
+            } catch (error) {
+                console.error('Error fetching MySQL resources:', error);
+            }
+        }
+
+        function updateResourceDisplay(data) {
+            // CPU Usage
+            const cpuPercent = data.cpu.system_cpu_percent || 0;
+            document.getElementById('mysqlCpu').textContent = `${cpuPercent.toFixed(1)}%`;
+            document.getElementById('cpuProgress').style.width = `${Math.min(cpuPercent, 100)}%`;
+            document.getElementById('cpuProgress').className = `progress-fill ${getProgressClass(cpuPercent)}`;
+            
+            // Memory Usage
+            const memoryMB = data.memory.system_memory_mb || 0;
+            const memoryPercent = data.memory.system_memory_percent || 0;
+            const bufferPoolMB = data.memory.innodb_buffer_pool_size_mb || 0;
+            document.getElementById('mysqlMemory').textContent = `${memoryMB.toFixed(0)} MB`;
+            document.getElementById('memoryProgress').style.width = `${Math.min(memoryPercent, 100)}%`;
+            document.getElementById('memoryProgress').className = `progress-fill ${getProgressClass(memoryPercent)}`;
+            document.getElementById('memoryDetail').textContent = 
+                `Buffer Pool: ${bufferPoolMB} MB | System: ${memoryPercent.toFixed(1)}%`;
+            
+            // Database Size
+            const dbSizeMB = data.database.size_mb || 0;
+            const dbSizeGB = dbSizeMB > 1024 ? (dbSizeMB / 1024).toFixed(2) + ' GB' : dbSizeMB.toFixed(0) + ' MB';
+            document.getElementById('dbSize').textContent = dbSizeGB;
+            document.getElementById('dbDetail').textContent = 
+                `Tables: ${data.database.table_count || 0} | Rows: ${(data.database.total_rows || 0).toLocaleString()}`;
+            
+            // Connections
+            const currentConn = data.connections.current || 0;
+            const maxConn = data.connections.max || 0;
+            const connPercent = data.connections.usage_percent || 0;
+            document.getElementById('connections').textContent = `${connPercent.toFixed(1)}%`;
+            document.getElementById('connectionProgress').style.width = `${Math.min(connPercent, 100)}%`;
+            document.getElementById('connectionProgress').className = `progress-fill ${getProgressClass(connPercent)}`;
+            document.getElementById('connectionDetail').textContent = `Active: ${currentConn} / Max: ${maxConn}`;
+            
+            // Uptime
+            const uptimeSeconds = data.mysql_status.uptime_seconds || 0;
+            const uptimeFormatted = formatUptime(uptimeSeconds);
+            document.getElementById('uptime').textContent = uptimeFormatted;
+            document.getElementById('uptimeDetail').textContent = 
+                `Running threads: ${data.mysql_status.threads_running || 0}`;
+        }
+
+        function getProgressClass(percent) {
+            if (percent < 50) return 'low';
+            if (percent < 80) return 'medium';
+            return 'high';
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            return `${minutes}m`;
+        }
     </script>
 </body>
 </html> 
