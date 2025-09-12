@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { lookupIP } = require('./fetchAndCacheIP');
+const { lookupIP, getUserNameFromDomain } = require('./fetchAndCacheIP');
 const { lookupIpToAsn, lookupIpToCountry } = require('./ipLookup');
 const { runSqlQuery, connectToDatabase, disconnectFromDatabase, getWhitelist } = require('./database');
 const { isInNightTimeRange } = require('./utils'); // Add this import
@@ -64,15 +64,22 @@ class LogProcessor {
           }
           const lastTimestamp = this.lastProcessedTimestamps[ipAddress] || 0;
           const newLines = [];
+          const usernameList = [];
           for (const line of logLines) {
             const parsedLine = this.parseLogLine(line, whitelist);
             if (parsedLine && parsedLine.timestamp > lastTimestamp) {
               newLines.push(parsedLine);
             }
+            if (parsedLine && parsedLine.domain) {
+              const username = getUserNameFromDomain(parsedLine.domain);
+              if (username && !usernameList.includes(username)) {
+                usernameList.push(username);
+                console.log(username);
+              }
+            }
           }
-
           if (newLines.length > 0) {
-            await this.saveLogEntries(newLines);
+            await this.saveLogEntries(newLines, usernameList);
             if (newLines.length > 0) {
               this.lastProcessedTimestamps[ipAddress] = Math.max(...newLines.map(l => l.timestamp));
             }
@@ -194,7 +201,7 @@ class LogProcessor {
       return null;
     }
   }
-  async saveLogEntries(logEntries) {
+  async saveLogEntries(logEntries, usernameList) {
     if (logEntries.length === 0) return;
     const blockedLogEntries = [];
     
@@ -247,7 +254,7 @@ class LogProcessor {
       await runSqlQuery(connection, insertLogQuery);
 
       // Process IPs for blocking (only blocked IPs)
-      await this.processIPsForBlocking(blockedLogEntries, connection);
+      await this.processIPsForBlocking(blockedLogEntries, connection, usernameList);
 
       console.log(`Saved ${blockedLogEntries.length} log entries (filtered from ${logEntries.length} total entries) in Japan timezone`);
     } catch (error) {
@@ -257,7 +264,7 @@ class LogProcessor {
     }
   }
 
-  async processIPsForBlocking(logEntries, connection) {
+  async processIPsForBlocking(logEntries, connection, usernameList) {
     try {
       // Count occurrences of each IP in this batch
       const ipCounts = {};
@@ -269,9 +276,9 @@ class LogProcessor {
         const existingIP = await this.getExistingIP(connection, ip);
         if (!existingIP) {
           const ipInfo = await this.getIPInfo(ip);
-          await this.insertIPRecord(connection, ip, ipInfo, count);
+          await this.insertIPRecord(connection, ip, ipInfo, count, usernameList);
         } else {
-          await this.updateIPRequestCount(connection, ip, count);
+          await this.updateIPRequestCount(connection, ip, count, usernameList);
         }
       }
 
@@ -316,21 +323,21 @@ class LogProcessor {
     }
   }
 
-  async insertIPRecord(connection, ip, ipInfo, count = 1) {
+  async insertIPRecord(connection, ip, ipInfo, count = 1, usernameList = []) {
     const query = `
-      INSERT INTO blocked_ips (ip, country_code, asn, is_blocked, request_count)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO blocked_ips (ip, country_code, asn, is_blocked, request_count, username)
+      VALUES (?, ?, ?, ?, ?, ?)
     `;
-    await runSqlQuery(connection, query, [ip, ipInfo.countryCode, ipInfo.asn, ipInfo.isBlocked, count]);
+    await runSqlQuery(connection, query, [ip, ipInfo.countryCode, ipInfo.asn, ipInfo.isBlocked, count, usernameList.join(',')]);
   }
 
-  async updateIPRequestCount(connection, ip, count = 1) {
+  async updateIPRequestCount(connection, ip, count = 1, usernameList = []) {
     const query = `
       UPDATE blocked_ips
-      SET request_count = request_count + ?, last_seen = CURRENT_TIMESTAMP
+      SET request_count = request_count + ?, last_seen = CURRENT_TIMESTAMP, username = ?
       WHERE ip = ?
     `;
-    await runSqlQuery(connection, query, [count, ip]);
+    await runSqlQuery(connection, query, [count, ip, usernameList.join(',')]);
   }
 
 

@@ -131,20 +131,15 @@ const countryTimezones = {
 
 exports.isInNightTimeRange = (countryCode) => {
   const timezone = countryTimezones[countryCode.toUpperCase()];
-
-  console.log(`Timezone for country: ${countryCode} is ${timezone}`);
   if (!timezone) {
-    // console.log(`No timezone found for country: ${countryCode}`);
     return false;
   }
 
   try {
-    // Get current time in the country's timezone
     const now = new Date();
     const localTime = new Date(now.toLocaleString("en-US", { timeZone: timezone }));
     const hour = localTime.getHours();
     return hour >= start_time && hour < end_time;
-    // return true
   } catch (error) {
     console.error(`Error getting time for country ${countryCode}:`, error);
     return false;

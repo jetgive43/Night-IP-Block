@@ -44,6 +44,7 @@ exports.createTables = async () => {
         ip VARCHAR(45) NOT NULL,
         country_code VARCHAR(10),
         asn VARCHAR(50),
+        username VARCHAR(100),
         request_count INT DEFAULT 0,
         is_blocked TINYINT DEFAULT 0,
         blocking_days INT DEFAULT 0,
@@ -149,6 +150,40 @@ exports.addBlockingDaysColumn = async () => {
     }
   } catch (error) {
     console.error("Error adding blocking_days column:", error);
+    throw error;
+  } finally {
+    await this.disconnectFromDatabase(connection);
+  }
+};
+
+// Add username column to existing blocked_ips table
+exports.addUsernameColumn = async () => {
+  const connection = await this.connectToDatabase();
+  try {
+    // Check if username column exists
+    const checkColumnQuery = `
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'blocked_ips' 
+      AND COLUMN_NAME = 'username'
+    `;
+    
+    const columnExists = await this.runSqlQuery(connection, checkColumnQuery);
+    
+    if (columnExists.length === 0) {
+      // Add the username column
+      const addColumnQuery = `
+        ALTER TABLE blocked_ips 
+        ADD COLUMN username VARCHAR(100) DEFAULT NULL AFTER asn
+      `;
+      await this.runSqlQuery(connection, addColumnQuery);
+      console.log("Added username column to blocked_ips table");
+    } else {
+      console.log("username column already exists");
+    }
+  } catch (error) {
+    console.error("Error adding username column:", error);
     throw error;
   } finally {
     await this.disconnectFromDatabase(connection);

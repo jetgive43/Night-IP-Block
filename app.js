@@ -3,9 +3,9 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 const cron = require('node-cron');
-const { createTables, addBlockingDaysColumn, updateBlockingDays } = require('./database');
+const { createTables, addBlockingDaysColumn, addUsernameColumn, updateBlockingDays } = require('./database');
 const LogProcessor = require('./logProcessor');
-const {fetchBlockData} = require('./fetchAndCacheIP');
+const {fetchBlockData, initializeUserDomainList} = require('./fetchAndCacheIP');
 const { ipToLong } = require('./ipLookup');
 
 const app = express();
@@ -50,6 +50,12 @@ async function initializeApp() {
     
     // Add blocking_days column if it doesn't exist
     await addBlockingDaysColumn();
+    
+    // Add username column if it doesn't exist
+    await addUsernameColumn();
+    
+    // Initialize user domain list once
+    await initializeUserDomainList();
     
     console.log('App initialized successfully');
   } catch (error) {
@@ -97,18 +103,20 @@ app.get('/api/blocked-ips', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
-    const query = `
-      SELECT b.ip
-      FROM blocked_ips b
-      LEFT JOIN whitelist w ON b.ip = w.ip
-      WHERE w.ip IS NULL and b.request_count > 3;
-    `;
-    const results = await runSqlQuery(connection, query);
-    await disconnectFromDatabase(connection);
-    const ipLongs = results.map(row => ipToLong(row.ip));
-    res.json(ipLongs.sort());
+    const username = req.query.username;
+    if(username) {   
+      const query = `
+        SELECT b.ip
+        FROM blocked_ips b
+        LEFT JOIN whitelist w ON b.ip = w.ip
+        WHERE w.ip IS NULL and b.request_count > 5;
+      `;
+      const results = await runSqlQuery(connection, query);
+      await disconnectFromDatabase(connection);
+      const ipLongs = results.map(row => ipToLong(row.ip));
+      res.json(ipLongs.sort());
+    }
   } catch (error) {
-    console.error('Error fetching blocked IPs:', error);
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
   }
 });

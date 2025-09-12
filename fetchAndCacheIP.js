@@ -3,6 +3,8 @@ const axios = require('axios');
 // Simple in-memory cache
 let blockDataCache = null;
 let lastFetchTime = 0;
+let userDomainListCache = null;
+let isDomainListFetched = false; // Add this flag
 const CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
 /**
@@ -24,13 +26,92 @@ async function fetchBlockData() {
         sortedData.sort((a, b) => a.start - b.start);
         return sortedData;
     } catch (error) {
-        console.error('Error fetching block data:', error.message);
+        return null;
+    }
+}
+async function fetchUserDomainList() {
+    
+    try
+    {
+        const response = await axios.get('https://slave.host-palace.net/user_domain_list', {
+            timeout: 10000
+        });
+        const userDomainList = response.data;
+        const filteredData = userDomainList.map(user => ({
+            domain: user.domain.replace('*.', ''),
+            username: user.username,
+            backnode: user.backnode,
+            region: user.region
+        }));
+        return filteredData;
+    } catch (error) {
+        console.error('Error fetching user domain list:', error.message);
         if (error.response) {
             console.error(`HTTP Status: ${error.response.status}`);
         }
         return null;
     }
+    return response.data;
 }
+/**
+ * Gets user domain list (fetch once only)
+ */
+async function getUserDomainList() {
+    // If already fetched, return cached data
+    if (isDomainListFetched && userDomainListCache) {
+        return userDomainListCache;
+    }
+    
+    console.log("fetching user domain list (one time only)");
+    const freshData = await fetchUserDomainList();
+    if (freshData) {
+        userDomainListCache = freshData;
+        isDomainListFetched = true; // Mark as fetched
+    }
+    return freshData;
+}
+/**
+ * Initialize user domain list at startup
+ */
+async function initializeUserDomainList() {
+    try {
+        console.log("Initializing user domain list...");
+        const data = await fetchUserDomainList();
+        if (data) {
+            userDomainListCache = data;
+            isDomainListFetched = true;
+            console.log(`User domain list initialized with ${data.length} entries`);
+        } else {
+            console.error("Failed to initialize user domain list");
+        }
+    } catch (error) {
+        console.error("Error initializing user domain list:", error);
+    }
+}
+
+/**
+ * Gets user domain list (from memory only)
+ */
+function getUserDomainList() {
+    if (!isDomainListFetched || !userDomainListCache) {
+        console.warn("User domain list not initialized. Call initializeUserDomainList() first.");
+        return null;
+    }
+    return userDomainListCache;
+}
+
+/**
+ * search username from domain
+ */
+function getUserNameFromDomain(domain) {
+    const userDomainList = getUserDomainList();
+    if (!userDomainList) {
+        return null;
+    }
+    const user = userDomainList.find(user => domain.includes(user.domain));
+    return user ? user.username : null;
+}
+
 
 /**
  * Gets block data (from cache or API)
@@ -51,6 +132,7 @@ async function getBlockData() {
     
     return freshData;
 }
+
 
 /**
  * Binary search function to find IP in block data
@@ -162,7 +244,10 @@ module.exports = {
     binarySearch,
     ip2long,
     lookupIP,
-    testLookup
+    testLookup,
+    getUserNameFromDomain,
+    initializeUserDomainList, // Add this export
+    getUserDomainList
 };
 // Run main function if this file is executed directly
 if (require.main === module) {
