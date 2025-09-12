@@ -825,42 +825,54 @@ app.get('/ipcheck', (req, res) => {
 async function updateUserDomainData() {
   const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
   const connection = await connectToDatabase();
-  const query = `
-    SELECT ip, username
-    FROM blocked_ips
-    WHERE username IS NOT NULL
-  `;
-  const results = await runSqlQuery(connection, query);
-  const userDomainList = results.map(row => ({
-    ip: row.ip,
-    username: row.username
-  }));
-  let usernameList = [];
-  await initializeUserDomainList(userDomainList);
-  userDomainList.forEach(async (item) => {
-    const domain = item.username;
-    const ip = item.ip;
-    const domainQuery = `
-    select domain
-    from log_entries
-    where ip = ?
+  
+  try {
+    const query = `
+      SELECT ip, username
+      FROM blocked_ips
+      WHERE username IS NOT NULL
     `;
-    const domainData = await runSqlQuery(connection, domainQuery, [ip]);
-    const domainList = domainData.map(row => row.domain);
-    for(const domain of domainList) {
-      const username = getUserNameFromDomain(domain);
-      if(!usernameList.includes(username)) {
-        usernameList.push(username);
+    const results = await runSqlQuery(connection, query);
+    const userDomainList = results.map(row => ({
+      ip: row.ip,
+      username: row.username
+    }));
+    
+    await initializeUserDomainList(userDomainList);
+    
+    // Process each item sequentially to avoid connection issues
+    for (const item of userDomainList) {
+      const domain = item.username;
+      const ip = item.ip;
+      
+      const domainQuery = `
+        SELECT domain
+        FROM log_entries
+        WHERE ip = ?
+      `;
+      const domainData = await runSqlQuery(connection, domainQuery, [ip]);
+      const domainList = domainData.map(row => row.domain);
+      
+      let usernameList = []; // Reset for each IP
+      for (const domain of domainList) {
+        const username = getUserNameFromDomain(domain);
+        if (username && !usernameList.includes(username)) {
+          usernameList.push(username);
+        }
+      }
+      
+      if (usernameList.length > 0) {
+        const updateQuery = `
+          UPDATE blocked_ips
+          SET username = ?
+          WHERE ip = ?
+        `;
+        await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]);
       }
     }
-    const updateQuery = `
-      UPDATE blocked_ips
-      SET username = ?
-      WHERE ip = ?
-    `;
-    await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]); 
+  } finally {
     await disconnectFromDatabase(connection);
-  });
+  }
 }
 function startCronJobs() {
   // Process category 9 logs every 2 minutes
