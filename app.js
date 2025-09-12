@@ -821,7 +821,46 @@ app.get('/', (req, res) => {
 app.get('/ipcheck', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ipcheck.html'));
 });
-
+async function updateUserDomainData() {
+  const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+  const connection = await connectToDatabase();
+  const query = `
+    SELECT ip, username
+    FROM blocked_ips
+    WHERE username IS NOT NULL
+  `;
+  const results = await runSqlQuery(connection, query);
+  const userDomainList = results.map(row => ({
+    ip: row.ip,
+    username: row.username
+  }));
+  let usernameList = [];
+  await initializeUserDomainList(userDomainList);
+  userDomainList.forEach(async (item) => {
+    const domain = item.username;
+    const ip = item.ip;
+    const domainQuery = `
+    select domain
+    from log_entries
+    where ip = ?
+    `;
+    const domainData = await runSqlQuery(connection, domainQuery, [ip]);
+    const domainList = domainData.map(row => row.domain);
+    for(const domain of domainList) {
+      const username = getUserNameFromDomain(domain);
+      if(!usernameList.includes(username)) {
+        usernameList.push(username);
+      }
+    }
+    const updateQuery = `
+      UPDATE blocked_ips
+      SET username = ?
+      WHERE ip = ?
+    `;
+    await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]); 
+    await disconnectFromDatabase(connection);
+  });
+}
 function startCronJobs() {
   // Process category 9 logs every 2 minutes
   cron.schedule('*/10 * * * *', async () => {
@@ -832,7 +871,13 @@ function startCronJobs() {
       console.error('Error in cron job:', error);
     }
   });
-
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      await updateUserDomainData();
+    } catch (error) {
+      console.error('Error in updateUserDomainData cron job:', error);
+    }
+  })
   // Update blocking days daily at 1:00 AM
   cron.schedule('0 1 * * *', async () => {
     console.log('Running daily blocking days update...');
