@@ -125,8 +125,12 @@ app.get('/api/blocked-ips', async (req, res) => {
         WHERE w.ip IS NULL and b.blocking_days >= ${limistblockingdays} and FIND_IN_SET(?, b.username) > 0;
       `;
       const results = await runSqlQuery(connection, query, [username]);
+      let ips = [];
+      results.forEach(row => {
+        ips.push(row.ip);
+      });
       await disconnectFromDatabase(connection);
-      res.json(results);
+      res.json(ips);
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
