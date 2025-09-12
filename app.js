@@ -6,6 +6,7 @@ const cron = require('node-cron');
 const { createTables, addBlockingDaysColumn, addUsernameColumn, updateBlockingDays } = require('./database');
 const LogProcessor = require('./logProcessor');
 const {fetchBlockData, initializeUserDomainList} = require('./fetchAndCacheIP');
+const { getUserNameFromDomain } = require('./fetchAndCacheIP');
 const { ipToLong } = require('./ipLookup');
 
 const app = express();
