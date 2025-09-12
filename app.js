@@ -119,7 +119,7 @@ app.get('/api/blocked-ips', async (req, res) => {
       res.json(ipLongs.sort());
     }else {
       const query = `
-        SELECT b.ip, b.username
+        SELECT b.ip
         FROM blocked_ips b
         LEFT JOIN whitelist w ON b.ip = w.ip
         WHERE w.ip IS NULL and b.blocking_days >= ${limistblockingdays} and FIND_IN_SET(?, b.username) > 0;
