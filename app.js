@@ -825,19 +825,18 @@ app.get('/ipcheck', (req, res) => {
 async function updateUserDomainData() {
   const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
   const connection = await connectToDatabase();
-  
   try {
     const query = `
       SELECT ip, username
       FROM blocked_ips
-      WHERE username IS NOT NULL
+      WHERE username IS NULL
     `;
     const results = await runSqlQuery(connection, query);
     const userDomainList = results.map(row => ({
       ip: row.ip,
       username: row.username
     }));
-    
+    console.log(userDomainList);
     await initializeUserDomainList(userDomainList);
     
     // Process each item sequentially to avoid connection issues
@@ -860,14 +859,19 @@ async function updateUserDomainData() {
           usernameList.push(username);
         }
       }
-      
+      console.log(usernameList);
       if (usernameList.length > 0) {
         const updateQuery = `
           UPDATE blocked_ips
           SET username = ?
           WHERE ip = ?
         `;
-        await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]);
+        console.log(ip, usernameList.join(','));
+        try {
+          await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]);
+        } catch (error) {
+          console.error('Error in updateUserDomainData cron job:', error);
+        }
       }
     }
   } finally {
@@ -884,7 +888,7 @@ function startCronJobs() {
       console.error('Error in cron job:', error);
     }
   });
-  cron.schedule('*/10 * * * *', async () => {
+  cron.schedule('*/2 * * * *', async () => {
     try {
       await updateUserDomainData();
     } catch (error) {
