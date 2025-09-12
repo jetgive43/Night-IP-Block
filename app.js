@@ -104,16 +104,29 @@ app.get('/api/blocked-ips', async (req, res) => {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
     const limistblockingdays = parseInt(process.env.LIMIT_BLOCKING_DAYS) || 5;
-    const query = `
-      SELECT b.ip
-      FROM blocked_ips b
-      LEFT JOIN whitelist w ON b.ip = w.ip
-      WHERE w.ip IS NULL and b.blocking_days > ${limistblockingdays};
-    `;
-    const results = await runSqlQuery(connection, query);
-    await disconnectFromDatabase(connection);
-    const ipLongs = results.map(row => ipToLong(row.ip));
-    res.json(ipLongs.sort());
+    const username = req.query.username;
+    if(!username) {
+      const query = `
+        SELECT b.ip
+        FROM blocked_ips b
+        LEFT JOIN whitelist w ON b.ip = w.ip
+        WHERE w.ip IS NULL and b.blocking_days > ${limistblockingdays};
+      `;
+      const results = await runSqlQuery(connection, query);
+      await disconnectFromDatabase(connection);
+      const ipLongs = results.map(row => ipToLong(row.ip));
+      res.json(ipLongs.sort());
+    }else {
+      const query = `
+        SELECT b.ip, b.username
+        FROM blocked_ips b
+        LEFT JOIN whitelist w ON b.ip = w.ip
+        WHERE w.ip IS NULL and b.blocking_days >= ${limistblockingdays} and FIND_IN_SET(?, b.username) > 0;
+      `;
+      const results = await runSqlQuery(connection, query, [username]);
+      await disconnectFromDatabase(connection);
+      res.json(results);
+    }
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
   }
