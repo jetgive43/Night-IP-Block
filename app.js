@@ -103,19 +103,16 @@ app.get('/api/blocked-ips', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
-    const username = req.query.username;
-    if(username) {   
-      const query = `
-        SELECT b.ip
-        FROM blocked_ips b
-        LEFT JOIN whitelist w ON b.ip = w.ip
-        WHERE w.ip IS NULL and b.request_count > 5;
-      `;
-      const results = await runSqlQuery(connection, query);
-      await disconnectFromDatabase(connection);
-      const ipLongs = results.map(row => ipToLong(row.ip));
-      res.json(ipLongs.sort());
-    }
+    const query = `
+      SELECT b.ip
+      FROM blocked_ips b
+      LEFT JOIN whitelist w ON b.ip = w.ip
+      WHERE w.ip IS NULL and b.blocking_days > 5;
+    `;
+    const results = await runSqlQuery(connection, query);
+    await disconnectFromDatabase(connection);
+    const ipLongs = results.map(row => ipToLong(row.ip));
+    res.json(ipLongs.sort());
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
   }
