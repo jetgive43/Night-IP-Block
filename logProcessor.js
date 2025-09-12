@@ -43,7 +43,6 @@ class LogProcessor {
       const response = await axios.get('https://slave.host-palace.net/portugal_cdn/get_node_list');
       return response.data;
     } catch (error) {
-      // console.error('Error fetching nodes:', error);
       return [];
     }
   }
@@ -119,12 +118,9 @@ class LogProcessor {
     const statusCode = parseInt(parts[4]);
     const responseTime = parseFloat(parts[5]);
     const userAgent = parts[6] || '';
-
-    // Parse timestamp
     const timestamp = this.parseTimestamp(timestampStr);
     if (!timestamp) return null;
 
-    // Parse request method and path
     const requestParts = requestInfo.split(' ');
     const requestMethod = requestParts[0] || '';
     const requestPath = requestParts.slice(1).join(' ') || '';
@@ -144,7 +140,6 @@ class LogProcessor {
 
   parseTimestamp(timestampStr) {
     try {
-      // Handle your format: 04/Sep/2025:16:46:01 +0000
       const match = timestampStr.match(/(\d+)\/(\w+)\/(\d+):(\d{2}):(\d{2}):(\d{2})\s+([+-]\d{4})/);
       
       if (!match) {
@@ -154,7 +149,6 @@ class LogProcessor {
       
       const [, day, month, year, hour, minute, second, timezone] = match;
       
-      // Convert month name to number
       const monthNames = {
         'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
         'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
@@ -165,8 +159,6 @@ class LogProcessor {
         console.error('Invalid month:', month);
         return null;
       }
-      
-      // Create date object (this will be in UTC)
       const date = new Date(Date.UTC(
         parseInt(year),
         monthNum,
@@ -180,16 +172,9 @@ class LogProcessor {
         console.error('Invalid date created from:', timestampStr);
         return null;
       }
-      
-      // Convert to Japan timezone
       const japanTime = new Date(date.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));      
-      // Check if it's in night time range (2-5 AM Japan time)
       const japanHour = japanTime.getHours();
       return Math.floor(japanTime.getTime() / 1000);
-      if (japanHour >= 2 && japanHour <= 5) {
-      } else {
-        return null;
-      }
     } catch (error) {
       console.error('Error parsing timestamp:', timestampStr, error);
       return null;
@@ -210,7 +195,6 @@ class LogProcessor {
               blockedLogEntries.push(entry);
             }
           } else {
-            // console.log(`Skipping IP ${entry.ip} - not blocked (status: ${blockInfo.blockStatus})`);
           }
         }
       } catch (error) {
@@ -225,9 +209,7 @@ class LogProcessor {
 
     const connection = await connectToDatabase();
     try {
-      // Insert log entries (only for blocked IPs) - store as Japan timezone
       const logValues = blockedLogEntries.map(entry => {
-        // Convert Unix timestamp to Japan timezone string for MySQL
         const japanTime = new Date(entry.timestamp * 1000).toLocaleString("sv-SE", {timeZone: "America/Toronto"});
         return `('${entry.ip}', '${japanTime}', '${entry.domain}', '${entry.requestMethod}', '${entry.requestPath}', ${entry.statusCode}, ${entry.responseTime}, '${entry.userAgent.replace(/'/g, "''")}')`;
       }).join(', ');
@@ -246,8 +228,6 @@ class LogProcessor {
       `;
 
       await runSqlQuery(connection, insertLogQuery);
-
-      // Process IPs for blocking (only blocked IPs)
       await this.processIPsForBlocking(blockedLogEntries, connection);
 
       console.log(`Saved ${blockedLogEntries.length} log entries (filtered from ${logEntries.length} total entries) in Japan timezone`);
@@ -260,14 +240,10 @@ class LogProcessor {
 
   async processIPsForBlocking(logEntries, connection) {
     try {
-      // Count occurrences of each IP in this batch and collect usernames
       const ipCounts = {};
-      const ipUsernames = {}; // New: Map IPs to their usernames
-      
+      const ipUsernames = {};
       for (const entry of logEntries) {
         ipCounts[entry.ip] = (ipCounts[entry.ip] || 0) + 1;
-        
-        // Extract username from domain and add to IP's username list
         if (entry.domain && !entry.domain.startsWith('xxxx')) {
           const username = getUserNameFromDomain(entry.domain);
           if (username) {
@@ -310,10 +286,7 @@ class LogProcessor {
 
   async getIPInfo(ip) {
     try {
-      // Get blocking status from cache
       const blockInfo = await lookupIP(ip);
-      
-      // Get ASN and country
       const asn = lookupIpToAsn(ip) || 'Unknown';
       const country = lookupIpToCountry(ip) || 'xx';
       
@@ -352,7 +325,6 @@ class LogProcessor {
 
   async updateStatistics(connection) {
     try {
-      // Update country statistics
       const countryQuery = `
         INSERT INTO country_stats (country_code, total_blocked_ips)
         SELECT country_code, COUNT(*) as total
@@ -363,8 +335,6 @@ class LogProcessor {
           total_blocked_ips = VALUES(total_blocked_ips)
       `;
       await runSqlQuery(connection, countryQuery);
-
-      // Update ASN statistics
       const asnQuery = `
         INSERT INTO asn_stats (asn, country_code, total_blocked_ips)
         SELECT asn, country_code, COUNT(*) as total

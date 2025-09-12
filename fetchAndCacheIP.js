@@ -1,15 +1,10 @@
 const axios = require('axios');
-
-// Simple in-memory cache
 let blockDataCache = null;
 let lastFetchTime = 0;
 let userDomainListCache = null;
 let isDomainListFetched = false; // Add this flag
 const CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
-/**
- * Fetches block data from the API
- */
 async function fetchBlockData() {
     try {
         const response = await axios.get('http://blocking.middlewaresv.xyz/api/blockedip/all', {
@@ -29,8 +24,7 @@ async function fetchBlockData() {
         return null;
     }
 }
-async function fetchUserDomainList() {
-    
+async function fetchUserDomainList() {    
     try
     {
         const response = await axios.get('https://slave.host-palace.net/user_domain_list', {
@@ -53,11 +47,7 @@ async function fetchUserDomainList() {
     }
     return response.data;
 }
-/**
- * Gets user domain list (fetch once only)
- */
 async function getUserDomainList() {
-    // If already fetched, return cached data
     if (isDomainListFetched && userDomainListCache) {
         return userDomainListCache;
     }
@@ -70,9 +60,6 @@ async function getUserDomainList() {
     }
     return freshData;
 }
-/**
- * Initialize user domain list at startup
- */
 async function initializeUserDomainList() {
     try {
         console.log("Initializing user domain list...");
@@ -88,10 +75,6 @@ async function initializeUserDomainList() {
         console.error("Error initializing user domain list:", error);
     }
 }
-
-/**
- * Gets user domain list (from memory only)
- */
 function getUserDomainList() {
     if (!isDomainListFetched || !userDomainListCache) {
         console.warn("User domain list not initialized. Call initializeUserDomainList() first.");
@@ -100,9 +83,6 @@ function getUserDomainList() {
     return userDomainListCache;
 }
 
-/**
- * search username from domain
- */
 function getUserNameFromDomain(domain) {
     const userDomainList = getUserDomainList();
     if (!userDomainList) {
@@ -111,15 +91,8 @@ function getUserNameFromDomain(domain) {
     const user = userDomainList.find(user => domain.includes(user.domain));
     return user ? user.username : null;
 }
-
-
-/**
- * Gets block data (from cache or API)
- */
 async function getBlockData() {
     const now = Date.now();
-    
-    // Check if we have valid cached data
     if (blockDataCache && (now - lastFetchTime) < CACHE_DURATION) {
         return blockDataCache;
     }
