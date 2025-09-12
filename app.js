@@ -103,11 +103,12 @@ app.get('/api/blocked-ips', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
     const connection = await connectToDatabase();
+    const limistblockingdays = parseInt(process.env.LIMIT_BLOCKING_DAYS) || 5;
     const query = `
       SELECT b.ip
       FROM blocked_ips b
       LEFT JOIN whitelist w ON b.ip = w.ip
-      WHERE w.ip IS NULL and b.blocking_days > 5;
+      WHERE w.ip IS NULL and b.blocking_days > ${limistblockingdays};
     `;
     const results = await runSqlQuery(connection, query);
     await disconnectFromDatabase(connection);
@@ -217,7 +218,7 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
       const countResult = await runSqlQuery(connection, countQuery, [countryCode]);
       const total = countResult[0].total;
       const query = `
-        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE country_code = ?
         ORDER BY request_count DESC
@@ -282,7 +283,7 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
       
       // Get paginated results
       const query = `
-        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE asn = ?
         ORDER BY request_count DESC
@@ -384,7 +385,7 @@ app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
     
     try {
       const query = `
-        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE asn = ? AND ip LIKE ?
         ORDER BY request_count DESC
@@ -497,7 +498,7 @@ app.get('/api/check-ip/:ip', async (req, res) => {
     const connection = await connectToDatabase();
     
     const query = `
-      SELECT b.ip, b.is_blocked, b.request_count, b.blocking_days, b.last_seen
+      SELECT b.ip, b.is_blocked, b.request_count, b.blocking_days, b.last_seen, b.username
       FROM blocked_ips b
       LEFT JOIN whitelist w ON b.ip = w.ip
       WHERE b.ip = ? AND w.ip IS NULL

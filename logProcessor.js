@@ -68,18 +68,12 @@ class LogProcessor {
           for (const line of logLines) {
             const parsedLine = this.parseLogLine(line, whitelist);
             if (parsedLine && parsedLine.timestamp > lastTimestamp) {
+              parsedLine.username = getUserNameFromDomain(parsedLine.domain);
               newLines.push(parsedLine);
-            }
-            if (parsedLine && parsedLine.domain) {
-              const username = getUserNameFromDomain(parsedLine.domain);
-              if (username && !usernameList.includes(username)) {
-                usernameList.push(username);
-                console.log(username);
-              }
             }
           }
           if (newLines.length > 0) {
-            await this.saveLogEntries(newLines, usernameList);
+            await this.saveLogEntries(newLines);
             if (newLines.length > 0) {
               this.lastProcessedTimestamps[ipAddress] = Math.max(...newLines.map(l => l.timestamp));
             }
@@ -201,7 +195,7 @@ class LogProcessor {
       return null;
     }
   }
-  async saveLogEntries(logEntries, usernameList) {
+  async saveLogEntries(logEntries) {
     if (logEntries.length === 0) return;
     const blockedLogEntries = [];
     
@@ -254,7 +248,7 @@ class LogProcessor {
       await runSqlQuery(connection, insertLogQuery);
 
       // Process IPs for blocking (only blocked IPs)
-      await this.processIPsForBlocking(blockedLogEntries, connection, usernameList);
+      await this.processIPsForBlocking(blockedLogEntries, connection);
 
       console.log(`Saved ${blockedLogEntries.length} log entries (filtered from ${logEntries.length} total entries) in Japan timezone`);
     } catch (error) {
@@ -264,16 +258,31 @@ class LogProcessor {
     }
   }
 
-  async processIPsForBlocking(logEntries, connection, usernameList) {
+  async processIPsForBlocking(logEntries, connection) {
     try {
-      // Count occurrences of each IP in this batch
+      // Count occurrences of each IP in this batch and collect usernames
       const ipCounts = {};
+      const ipUsernames = {}; // New: Map IPs to their usernames
+      
       for (const entry of logEntries) {
         ipCounts[entry.ip] = (ipCounts[entry.ip] || 0) + 1;
+        
+        // Extract username from domain and add to IP's username list
+        if (entry.domain && !entry.domain.startsWith('xxxx')) {
+          const username = getUserNameFromDomain(entry.domain);
+          if (username) {
+            if (!ipUsernames[entry.ip]) {
+              ipUsernames[entry.ip] = new Set();
+            }
+            ipUsernames[entry.ip].add(username);
+          }
+        }
       }
 
       for (const [ip, count] of Object.entries(ipCounts)) {
         const existingIP = await this.getExistingIP(connection, ip);
+        const usernameList = ipUsernames[ip] ? Array.from(ipUsernames[ip]) : [];
+        
         if (!existingIP) {
           const ipInfo = await this.getIPInfo(ip);
           await this.insertIPRecord(connection, ip, ipInfo, count, usernameList);
@@ -337,7 +346,7 @@ class LogProcessor {
       SET request_count = request_count + ?, last_seen = CURRENT_TIMESTAMP, username = ?
       WHERE ip = ?
     `;
-    await runSqlQuery(connection, query, [count, ip, usernameList.join(',')]);
+    await runSqlQuery(connection, query, [count, usernameList.join(','), ip]);
   }
 
 
