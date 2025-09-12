@@ -349,7 +349,7 @@ app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) =>
     
     try {
       const query = `
-        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen
+        SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE country_code = ? AND ip LIKE ?
         ORDER BY request_count DESC

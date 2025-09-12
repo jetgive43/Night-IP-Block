@@ -768,7 +768,7 @@
 
                 const response = await fetch(url);
                 const result = await response.json();
-
+                console.log(result);
                 if (!response.ok) {
                     throw new Error(result.error || 'Failed to search IPs');
                 }
@@ -1163,8 +1163,13 @@
                     } else {
                         result.data.forEach(ip => {
                             html += `
-                                <div class="ip-item" onclick="selectIP('${ip.ip}')">
+                                <div class="ip-item" onclick="selectIP('${ip.ip}')" style="background-color: ${ip.is_whitelisted ? '#dddfdd' : ''}; padding: 5px;">
+                                    <button class="whitelist-btn" onclick="whitelistIP('${ip.ip}')">
+                                        ${ip.is_whitelisted ? '-' : '+'}
+                                    </button>
                                     <span>${ip.ip}</span>
+                                    <span>${ip.username || ''}</span>
+                                    <span>${ip.blocking_days || 0}d</span>
                                     <span>${ip.request_count}</span>
                                 </div>
                             `;
