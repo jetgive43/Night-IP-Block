@@ -136,7 +136,6 @@ app.get('/api/blocked-ips', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch blocked IPs' });
   }
 });
-
 app.get('/api/stats/countries', requireAuth, async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -384,6 +383,41 @@ app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) =>
     }
   } catch (error) {
     console.error('Error searching IPs by country:', error);
+    res.status(500).json({ error: 'Failed to search IPs' });
+  }
+});
+
+app.get('/api/ips/search', async (req, res) => {
+  try {
+  const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+  const connection = await connectToDatabase();
+  const searchTerm = req.query.q;
+  const query = `
+    SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
+    FROM blocked_ips
+    WHERE ip LIKE ?
+    ORDER BY request_count DESC
+    LIMIT 100
+  `;
+  const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
+  const results = await runSqlQuery(connection, query, [`%${searchTerm}%`]);
+  results.forEach(result => {
+    result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
+  });
+  await disconnectFromDatabase(connection);
+  res.json({
+    data: results,
+    pagination: {
+      page: 1,
+      limit: 100,
+      total: results.length,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false
+    }
+    });
+  } catch (error) {
+    console.error('Error searching IPs:', error);
     res.status(500).json({ error: 'Failed to search IPs' });
   }
 });

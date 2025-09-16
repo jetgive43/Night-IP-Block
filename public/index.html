@@ -750,10 +750,10 @@
 
         // Search for IPs containing the search term
         async function searchIPs(searchTerm) {
-            if (!selectedCountry && !selectedASN) {
-                document.getElementById('ipList').innerHTML = '<div class="loading">Please select a country or ASN first</div>';
-                return;
-            }
+            // if (!selectedCountry && !selectedASN) {
+            //     document.getElementById('ipList').innerHTML = '<div class="loading">Please select a country or ASN first</div>';
+            //     return;
+            // }
 
             const ipList = document.getElementById('ipList');
             ipList.innerHTML = '<div class="loading">Searching for IPs...</div>';
@@ -765,6 +765,7 @@
                 } else if (selectedASN) {
                     url = `/api/ips/asn/${selectedASN}/search?q=${encodeURIComponent(searchTerm)}`;
                 }
+                url = `/api/ips/search?q=${encodeURIComponent(searchTerm)}`;
 
                 const response = await fetch(url);
                 const result = await response.json();
@@ -774,7 +775,7 @@
                 }
 
                 let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">
-                    Search results for "${searchTerm}" ${selectedCountry ? `in ${selectedCountry.toUpperCase()}` : `in ASN ${selectedASN}`}
+                    Search results for "${searchTerm}"
                 </h4>`;
 
                 if (result.data.length === 0) {
