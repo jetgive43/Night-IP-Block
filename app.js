@@ -127,7 +127,8 @@ app.get('/api/blocked-ips', async (req, res) => {
       `;
       const results = await runSqlQuery(connection, query, [username]);
       let ips = [];
-      results.forEach(row => {
+      results
+      .forEach(row => {
         ips.push(row.ip);
       });
       await disconnectFromDatabase(connection);
