@@ -123,7 +123,7 @@ app.get('/api/blocked-ips', async (req, res) => {
         SELECT b.ip
         FROM blocked_ips b
         LEFT JOIN whitelist w ON b.ip = w.ip
-        WHERE w.ip IS NULL and b.blocking_days >= ${limistblockingdays} and FIND_IN_SET(?, b.username) > 0;
+        WHERE w.ip IS NULL and b.blocking_days >= ${limistblockingdays} and FIND_IN_SET(?, b.username) > 0 and b.user_type = 1;
       `;
       const results = await runSqlQuery(connection, query, [username]);
       let ips = [];
