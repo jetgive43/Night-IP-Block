@@ -3,7 +3,7 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 const cron = require('node-cron');
-const { createTables, addBlockingDaysColumn, addUsernameColumn, updateBlockingDays } = require('./database');
+const { createTables, addBlockingDaysColumn, addUsernameColumn, updateBlockingDays, addUserTypeColumn } = require('./database');
 const LogProcessor = require('./logProcessor');
 const {fetchBlockData, initializeUserDomainList} = require('./fetchAndCacheIP');
 const { getUserNameFromDomain } = require('./fetchAndCacheIP');
@@ -55,6 +55,9 @@ async function initializeApp() {
     // Add username column if it doesn't exist
     await addUsernameColumn();
     
+    // Add user type column if it doesn't exist
+    await addUserTypeColumn();
+    
     // Initialize user domain list once
     await initializeUserDomainList();
     
@@ -68,8 +71,6 @@ async function initializeApp() {
 // Authentication routes
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
-  
-  // Check credentials from environment variables
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
   const validPassword = process.env.ADMIN_PASSWORD || 'admin';
   console.log(validUsername, validPassword);
@@ -111,7 +112,7 @@ app.get('/api/blocked-ips', async (req, res) => {
         SELECT b.ip
         FROM blocked_ips b
         LEFT JOIN whitelist w ON b.ip = w.ip
-        WHERE w.ip IS NULL and b.blocking_days > ${limistblockingdays};
+        WHERE w.ip IS NULL and b.blocking_days > ${limistblockingdays} and b.user_type = 1;
       `;
       const results = await runSqlQuery(connection, query);
       await disconnectFromDatabase(connection);
@@ -860,6 +861,46 @@ app.get('/', (req, res) => {
 app.get('/ipcheck', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ipcheck.html'));
 });
+async function updateUserType() {
+  const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
+  const connection = await connectToDatabase();
+  try {
+    const query = `
+      SELECT id, ip, username
+      FROM blocked_ips
+    `;
+    const results = await runSqlQuery(connection, query);
+    const ipList = results.map(row => ({
+      id: row.id,
+      ip: row.ip,
+      username: row.username
+    }));
+
+    // Process each item sequentially to avoid connection issues
+    for (const item of ipList) {
+      const username = item.username;
+      const userNameList = username.split(',');
+      if (userNameList.length >= 5) {
+        const updateQuery = `
+          UPDATE blocked_ips
+          SET user_type = 2
+          WHERE id = ?
+        `;
+        await runSqlQuery(connection, updateQuery, [item.id]);     }
+      else {
+        const updateQuery = `
+          UPDATE blocked_ips
+          SET user_type = 1
+          WHERE id = ?
+        `;
+        await runSqlQuery(connection, updateQuery, [item.id]);
+      }
+    }
+  } finally {
+    await disconnectFromDatabase(connection);
+  }
+}
+
 async function updateUserDomainData() {
   const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
   const connection = await connectToDatabase();
@@ -897,14 +938,12 @@ async function updateUserDomainData() {
           usernameList.push(username);
         }
       }
-      console.log(usernameList);
       if (usernameList.length > 0) {
         const updateQuery = `
           UPDATE blocked_ips
           SET username = ?
           WHERE ip = ?
         `;
-        console.log(ip, usernameList.join(','));
         try {
           await runSqlQuery(connection, updateQuery, [usernameList.join(','), ip]);
         } catch (error) {
@@ -917,7 +956,6 @@ async function updateUserDomainData() {
   }
 }
 function startCronJobs() {
-  // Process category 9 logs every 2 minutes
   cron.schedule('*/10 * * * *', async () => {
     console.log('Running category 9 log processing...');
     try {
@@ -929,6 +967,13 @@ function startCronJobs() {
   cron.schedule('*/2 * * * *', async () => {
     try {
       await updateUserDomainData();
+    } catch (error) {
+      console.error('Error in updateUserDomainData cron job:', error);
+    }
+  })
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      await updateUserType();
     } catch (error) {
       console.error('Error in updateUserDomainData cron job:', error);
     }
