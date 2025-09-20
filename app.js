@@ -869,6 +869,7 @@ async function updateUserType() {
     const query = `
       SELECT id, ip, username
       FROM blocked_ips
+      where username.split(',').length >= 5
     `;
     const results = await runSqlQuery(connection, query);
     const ipList = results.map(row => ({
@@ -972,11 +973,12 @@ function startCronJobs() {
       console.error('Error in updateUserDomainData cron job:', error);
     }
   })
-  cron.schedule('*/10 * * * *', async () => {
+  // Update user type every 20 minutes
+  cron.schedule('*/20 * * * *', async () => {
     try {
       await updateUserType();
     } catch (error) {
-      console.error('Error in updateUserDomainData cron job:', error);
+      console.error('Error in updateUserType cron job:', error);
     }
   })
   // Update blocking days daily at 1:00 AM
