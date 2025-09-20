@@ -881,9 +881,13 @@ async function updateUserType() {
     // Process each item sequentially to avoid connection issues
     for (const item of ipList) {
       const username = item.username;
-      const userNameList = username.split(',');
+      if(username){
+        const userNameList = username.split(',');
+      }else{
+        const userNameList = [];
+      }
       // if userNameList is not null and length is greater than 5, then update user_type to 2
-      if (username && userNameList.length >= 5) {
+      if (userNameList.length >= 5) {
         const updateQuery = `
           UPDATE blocked_ips
           SET user_type = 2
@@ -975,7 +979,7 @@ function startCronJobs() {
     }
   })
   // Update user type every 20 minutes
-  cron.schedule('*/20 * * * *', async () => {
+  cron.schedule('*/2 * * * *', async () => {
     try {
       await updateUserType();
     } catch (error) {
