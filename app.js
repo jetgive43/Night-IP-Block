@@ -881,11 +881,13 @@ async function updateUserType() {
     // Process each item sequentially to avoid connection issues
     for (const item of ipList) {
       const username = item.username;
+      let userNameList = [];
       if(username){
-        const userNameList = username.split(',');
+        userNameList = username.split(',');
       }else{
-        const userNameList = [];
+        userNameList = [];
       }
+      console.log(userNameList);
       // if userNameList is not null and length is greater than 5, then update user_type to 2
       if (userNameList.length >= 5) {
         const updateQuery = `
