@@ -869,7 +869,7 @@ async function updateUserType() {
     const query = `
       SELECT id, ip, username
       FROM blocked_ips
-      where username.split(',').length >= 5
+      where username is not null;
     `;
     const results = await runSqlQuery(connection, query);
     const ipList = results.map(row => ({
@@ -881,13 +881,7 @@ async function updateUserType() {
     // Process each item sequentially to avoid connection issues
     for (const item of ipList) {
       const username = item.username;
-      let userNameList = [];
-      if(username){
-        userNameList = username.split(',');
-      }else{
-        userNameList = [];
-      }
-      console.log(userNameList);
+      const userNameList = username.split(',');
       // if userNameList is not null and length is greater than 5, then update user_type to 2
       if (userNameList.length >= 5) {
         const updateQuery = `
@@ -981,7 +975,7 @@ function startCronJobs() {
     }
   })
   // Update user type every 20 minutes
-  cron.schedule('*/2 * * * *', async () => {
+  cron.schedule('*/20 * * * *', async () => {
     try {
       await updateUserType();
     } catch (error) {
