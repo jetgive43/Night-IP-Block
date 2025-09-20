@@ -882,7 +882,8 @@ async function updateUserType() {
     for (const item of ipList) {
       const username = item.username;
       const userNameList = username.split(',');
-      if (userNameList.length >= 5) {
+      // if userNameList is not null and length is greater than 5, then update user_type to 2
+      if (username && userNameList.length >= 5) {
         const updateQuery = `
           UPDATE blocked_ips
           SET user_type = 2
