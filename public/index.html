@@ -773,9 +773,9 @@
                 if (!response.ok) {
                     throw new Error(result.error || 'Failed to search IPs');
                 }
-
+                console.log(result.data.length);
                 let html = `<h4 style="margin-bottom: 12px; color: #667eea; font-size: 0.9rem;">
-                    Search results for "${searchTerm}"
+                    Search results for "${searchTerm}" in ${result.data[0]? result.data[0].country_code : ''}
                 </h4>`;
 
                 if (result.data.length === 0) {
