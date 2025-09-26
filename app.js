@@ -33,7 +33,6 @@ function requireAuth(req, res, next) {
   }
 }
 
-// Serve static files but protect them
 app.use('/public', (req, res, next) => {
   if (req.path === '/login.html') {
     return next();
@@ -41,24 +40,18 @@ app.use('/public', (req, res, next) => {
   requireAuth(req, res, next);
 }, express.static(path.join(__dirname, 'public')));
 
-// Initialize log processor
 const logProcessor = new LogProcessor();
 
-// Initialize app with migration
 async function initializeApp() {
   try {
     await createTables();
     
-    // Add blocking_days column if it doesn't exist
     await addBlockingDaysColumn();
     
-    // Add username column if it doesn't exist
     await addUsernameColumn();
     
-    // Add user type column if it doesn't exist
     await addUserTypeColumn();
     
-    // Initialize user domain list once
     await initializeUserDomainList();
     
     console.log('App initialized successfully');
@@ -68,7 +61,6 @@ async function initializeApp() {
   }
 }
 
-// Authentication routes
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
   const validUsername = process.env.ADMIN_USERNAME || 'admin';
@@ -100,7 +92,6 @@ app.get('/api/auth/status', (req, res) => {
   });
 });
 
-// Protected API Routes
 app.get('/api/blocked-ips', async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -183,7 +174,6 @@ app.get('/api/stats/asn', requireAuth, async (req, res) => {
   }
 });
 
-// Whitelist IP endpoint
 app.post('/api/whitelist', requireAuth, async (req, res) => {
   try {
     const { ip } = req.body;
@@ -204,7 +194,6 @@ app.post('/api/whitelist', requireAuth, async (req, res) => {
         res.json({ message: `IP ${ip} has been whitelisted` });
       }
     } catch (error) {
-      // Rollback transaction on error
       await runSqlQuery(connection, 'ROLLBACK');
       throw error;
     } finally {
@@ -216,7 +205,6 @@ app.post('/api/whitelist', requireAuth, async (req, res) => {
   }
 });
 
-// Paginated IPs by country
 app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
   try {
     const { countryCode } = req.params;
@@ -228,7 +216,6 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
     const connection = await connectToDatabase();
     
     try {
-      // Get total count
       const countQuery = `
         SELECT COUNT(*) as total
         FROM blocked_ips
@@ -247,7 +234,6 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
       const results = await runSqlQuery(connection, query, [countryCode, limit, offset]);
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
       
-      // Add whitelist status to results
       results.forEach(result => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
@@ -279,7 +265,6 @@ app.get('/api/config', requireAuth, (req, res) => {
   });
 });
 
-// Paginated IPs by ASN
 app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   try {
     const { asn } = req.params;
@@ -291,7 +276,6 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
     const connection = await connectToDatabase();
     
     try {
-      // Get total count
       const countQuery = `
         SELECT COUNT(*) as total
         FROM blocked_ips
@@ -300,7 +284,6 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
       const countResult = await runSqlQuery(connection, countQuery, [asn]);
       const total = countResult[0].total;
       
-      // Get paginated results
       const query = `
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
@@ -311,10 +294,8 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
       
       const results = await runSqlQuery(connection, query, [asn, limit, offset]);
       
-      // Get whitelist status
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
       
-      // Add whitelist status to results
       results.forEach(result => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
@@ -339,7 +320,6 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
   }
 });
 
-// Search IPs by country with IP string filter
 app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) => {
   try {
     const { countryCode } = req.params;
@@ -363,8 +343,6 @@ app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) =>
       
       const results = await runSqlQuery(connection, query, [countryCode, `%${searchTerm}%`]);
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
-      
-      // Add whitelist status to results
       results.forEach(result => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
@@ -424,7 +402,6 @@ app.get('/api/ips/search', async (req, res) => {
   }
 });
 
-// Search IPs by ASN with IP string filter
 app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
   try {
     const { asn } = req.params;
@@ -449,7 +426,6 @@ app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
       const results = await runSqlQuery(connection, query, [asn, `%${searchTerm}%`]);
       const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
       
-      // Add whitelist status to results
       results.forEach(result => {
         result.is_whitelisted = whitelist.some(whitelistedIp => whitelistedIp.ip === result.ip);
       });
@@ -474,7 +450,6 @@ app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
   }
 });
 
-// Paginated logs by IP
 app.get('/api/logs/ip/:ip', async (req, res) => {
   try {
     const { ip } = req.params;
@@ -486,7 +461,6 @@ app.get('/api/logs/ip/:ip', async (req, res) => {
     const connection = await connectToDatabase();
     
     try {
-      // Get total count
       const countQuery = `
         SELECT COUNT(*) as total
         FROM log_entries
@@ -495,7 +469,6 @@ app.get('/api/logs/ip/:ip', async (req, res) => {
       const countResult = await runSqlQuery(connection, countQuery, [ip]);
       const total = countResult[0].total;
       
-      // Get paginated results
       const query = `
         SELECT ip, timestamp, domain, request_method, request_path, 
                status_code, response_time, user_agent
@@ -544,7 +517,6 @@ app.get('/api/total-blocked', requireAuth, async (req, res) => {
   }
 });
 
-// Check if IP is blocked (no auth required)
 app.get('/api/check-ip/:ip', async (req, res) => {
   try {
     const { ip } = req.params;
@@ -620,7 +592,6 @@ app.get('/api/logs/ip-domain/:ip/:domain', async (req, res) => {
   }
 });
 
-// MySQL Resource Monitoring endpoint
 app.get('/api/mysql/resources', requireAuth, async (req, res) => {
   try {
     const { runSqlQuery, connectToDatabase, disconnectFromDatabase } = require('./database');
@@ -633,15 +604,12 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
     try {
       const dbName = process.env.DATABASE_DB || 'night_ip_block';
       
-      // Initialize default values
       let statusResults = [];
       let variableResults = [];
       let sizeResults = [];
       let countResults = [];
       
-      // Try performance_schema first, fallback to SHOW STATUS/VARIABLES
       try {
-        // Try performance_schema queries first
         const mysqlQueries = [
           `SELECT 
             VARIABLE_NAME, VARIABLE_VALUE 
@@ -660,15 +628,12 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
         ]);
       } catch (perfError) {
         console.log('Performance schema not available, using SHOW commands');
-        
-        // Fallback to SHOW STATUS and SHOW VARIABLES
         try {
           const [statusRows, variableRows] = await Promise.all([
             runSqlQuery(connection, `SHOW STATUS WHERE Variable_name IN ('Threads_running', 'Threads_connected', 'Uptime')`),
             runSqlQuery(connection, `SHOW VARIABLES WHERE Variable_name IN ('innodb_buffer_pool_size', 'key_buffer_size', 'max_connections')`)
           ]);
           
-          // Convert to same format as performance_schema
           statusResults = statusRows.map(row => ({
             VARIABLE_NAME: row.Variable_name,
             VARIABLE_VALUE: row.Value
@@ -680,7 +645,6 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
           }));
         } catch (showError) {
           console.log('SHOW commands failed, using minimal data');
-          // Set minimal default values
           statusResults = [
             { VARIABLE_NAME: 'Threads_running', VARIABLE_VALUE: '0' },
             { VARIABLE_NAME: 'Threads_connected', VARIABLE_VALUE: '1' },
@@ -694,7 +658,6 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
         }
       }
       
-      // Get database size and table info (these should work on most MySQL versions)
       try {
         const [sizeRows, countRows] = await Promise.all([
           runSqlQuery(connection, `
@@ -721,7 +684,6 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
         countResults = [{ table_count: 0, total_rows: 0 }];
       }
 
-      // Get system process info for MySQL
       let systemStats = {
         cpu_percent: 0,
         memory_mb: 0,
@@ -729,13 +691,10 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
       };
 
       try {
-        // Try to get MySQL process stats on different platforms
         let command;
         if (process.platform === 'win32') {
-          // Windows - get MySQL process info
           command = `powershell "Get-Process mysql* | Select-Object CPU,WorkingSet | ConvertTo-Json"`;
         } else {
-          // Linux/Unix - get MySQL process info
           command = `ps aux | grep [m]ysql | awk '{cpu+=$3; mem+=$4; rss+=$6} END {print cpu","mem","rss}'`;
         }
 
@@ -753,13 +712,12 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
           const [cpu, memPercent, rss] = stdout.trim().split(',').map(parseFloat);
           systemStats.cpu_percent = cpu || 0;
           systemStats.memory_percent = memPercent || 0;
-          systemStats.memory_mb = (rss || 0) / 1024; // Convert KB to MB
+          systemStats.memory_mb = (rss || 0) / 1024;
         }
       } catch (error) {
         console.log('Could not get system MySQL process stats:', error.message);
       }
 
-      // Format the response
       const formatResults = (results) => {
         const formatted = {};
         results.forEach(row => {
@@ -773,10 +731,8 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
       const dbSize = sizeResults[0] || { size_mb: 0 };
       const dbCounts = countResults[0] || { table_count: 0, total_rows: 0 };
 
-      // Calculate buffer pool usage if available
       let bufferPoolUsage = 0;
       try {
-        // Try to get buffer pool usage from performance_schema first
         let bufferPoolQuery = `SELECT 
           VARIABLE_VALUE as pool_size
         FROM performance_schema.global_status 
@@ -790,7 +746,6 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
             bufferPoolUsage = poolSizeBytes > 0 ? (usedBytes / poolSizeBytes * 100) : 0;
           }
         } catch (perfError) {
-          // Fallback to SHOW STATUS
           try {
             const showResults = await runSqlQuery(connection, `SHOW STATUS WHERE Variable_name = 'Innodb_buffer_pool_bytes_data'`);
             if (showResults.length > 0) {
@@ -846,7 +801,6 @@ app.get('/api/mysql/resources', requireAuth, async (req, res) => {
   }
 });
 
-// Serve login page for unauthenticated users
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
@@ -878,12 +832,10 @@ async function updateUserType() {
       username: row.username
     }));
 
-    // Process each item sequentially to avoid connection issues
     for (const item of ipList) {
       const username = item.username;
       const userNameList = username.split(',');
       console.log(userNameList);
-      // if userNameList is not null and length is greater than 5, then update user_type to 2
       if (userNameList.length >= 5) {
         const updateQuery = `
           UPDATE blocked_ips
@@ -922,7 +874,6 @@ async function updateUserDomainData() {
     console.log(userDomainList);
     await initializeUserDomainList(userDomainList);
     
-    // Process each item sequentially to avoid connection issues
     for (const item of userDomainList) {
       const domain = item.username;
       const ip = item.ip;
@@ -935,7 +886,7 @@ async function updateUserDomainData() {
       const domainData = await runSqlQuery(connection, domainQuery, [ip]);
       const domainList = domainData.map(row => row.domain);
       
-      let usernameList = []; // Reset for each IP
+      let usernameList = [];
       for (const domain of domainList) {
         const username = getUserNameFromDomain(domain);
         if (username && !usernameList.includes(username)) {
@@ -975,7 +926,6 @@ function startCronJobs() {
       console.error('Error in updateUserDomainData cron job:', error);
     }
   })
-  // Update user type every 20 minutes
   cron.schedule('*/20 * * * *', async () => {
     try {
       await updateUserType();
@@ -983,7 +933,6 @@ function startCronJobs() {
       console.error('Error in updateUserType cron job:', error);
     }
   })
-  // Update blocking days daily at 1:00 AM
   cron.schedule('0 1 * * *', async () => {
     console.log('Running daily blocking days update...');
     try {
@@ -999,10 +948,8 @@ function startCronJobs() {
   console.log('Cron jobs started');
 }
 
-// Start server
 app.listen(PORT, async () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  // Initialize database and start cron jobs
   await initializeApp();
   startCronJobs();
 });
