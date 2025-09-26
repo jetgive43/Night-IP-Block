@@ -37,7 +37,6 @@ exports.disconnectFromDatabase = async (connection) => {
 exports.createTables = async () => {
   const connection = await this.connectToDatabase();
   try {
-    // Create blocked_ips table
     const createBlockedIpsTable = `
       CREATE TABLE IF NOT EXISTS blocked_ips (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -55,7 +54,6 @@ exports.createTables = async () => {
     `;
     await this.runSqlQuery(connection, createBlockedIpsTable);
 
-    // Create log_entries table
     const createLogEntriesTable = `
       CREATE TABLE IF NOT EXISTS log_entries (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -77,7 +75,6 @@ exports.createTables = async () => {
     `;
     await this.runSqlQuery(connection, createLogEntriesTable);
 
-    // Create country_stats table
     const createCountryStatsTable = `
       CREATE TABLE IF NOT EXISTS country_stats (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -89,7 +86,6 @@ exports.createTables = async () => {
     `;
     await this.runSqlQuery(connection, createCountryStatsTable);
 
-    // Create whitelist table
     const createWhitelistTable = `
       CREATE TABLE IF NOT EXISTS whitelist (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -100,7 +96,6 @@ exports.createTables = async () => {
     `;
     await this.runSqlQuery(connection, createWhitelistTable);
 
-    // Create asn_stats table
     const createAsnStatsTable = `
       CREATE TABLE IF NOT EXISTS asn_stats (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -122,11 +117,9 @@ exports.createTables = async () => {
   }
 };
 
-// Add blocking_days column to existing blocked_ips table
 exports.addBlockingDaysColumn = async () => {
   const connection = await this.connectToDatabase();
   try {
-    // Check if blocking_days column exists
     const checkColumnQuery = `
       SELECT COLUMN_NAME 
       FROM INFORMATION_SCHEMA.COLUMNS 
@@ -138,7 +131,6 @@ exports.addBlockingDaysColumn = async () => {
     const columnExists = await this.runSqlQuery(connection, checkColumnQuery);
     
     if (columnExists.length === 0) {
-      // Add the blocking_days column
       const addColumnQuery = `
         ALTER TABLE blocked_ips 
         ADD COLUMN blocking_days INT DEFAULT 0 AFTER is_blocked
@@ -156,7 +148,6 @@ exports.addBlockingDaysColumn = async () => {
   }
 };
 
-// Add username column to existing blocked_ips table
 exports.addUsernameColumn = async () => {
   const connection = await this.connectToDatabase();
   try {
@@ -171,7 +162,6 @@ exports.addUsernameColumn = async () => {
     const columnExists = await this.runSqlQuery(connection, checkColumnQuery);
     
     if (columnExists.length === 0) {
-      // Add the username column
       const addColumnQuery = `
         ALTER TABLE blocked_ips 
         ADD COLUMN username VARCHAR(100) DEFAULT NULL AFTER asn
@@ -189,7 +179,6 @@ exports.addUsernameColumn = async () => {
   }
 };
 
-// Add user type column to existing blocked_ips table
 exports.addUserTypeColumn = async () => {
   const connection = await this.connectToDatabase();
   try {
@@ -221,7 +210,6 @@ exports.addUserTypeColumn = async () => {
   }
 };
 
-// Calculate and update blocking days for all IPs
 exports.updateBlockingDays = async () => {
   const connection = await this.connectToDatabase();
   try {
@@ -244,8 +232,6 @@ exports.updateBlockingDays = async () => {
       
       const result = await this.runSqlQuery(connection, countDaysQuery, [ip]);
       const blockingDays = result[0].days_count || 0;
-      
-      // Update the blocking_days field
       const updateQuery = `
         UPDATE blocked_ips 
         SET blocking_days = ? 

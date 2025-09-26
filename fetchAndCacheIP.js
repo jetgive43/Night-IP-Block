@@ -2,8 +2,8 @@ const axios = require('axios');
 let blockDataCache = null;
 let lastFetchTime = 0;
 let userDomainListCache = null;
-let isDomainListFetched = false; // Add this flag
-const CACHE_DURATION = 3600000; // 1 hour in milliseconds
+let isDomainListFetched = false;
+const CACHE_DURATION = 3600000;
 
 async function fetchBlockData() {
     try {
@@ -56,7 +56,7 @@ async function getUserDomainList() {
     const freshData = await fetchUserDomainList();
     if (freshData) {
         userDomainListCache = freshData;
-        isDomainListFetched = true; // Mark as fetched
+        isDomainListFetched = true;
     }
     return freshData;
 }
@@ -109,6 +109,7 @@ async function getBlockData() {
 
 /**
  * Binary search function to find IP in block data
+ * 
  */
 function binarySearch(data, ip) {
     let low = 0;
@@ -130,13 +131,14 @@ function binarySearch(data, ip) {
     }
 
     return {
-        blockStatus: 2, // Not found, meaning not blocked
-        countryCode: "xx" // No country code for unmatched IP
+        blockStatus: 2,
+        countryCode: "xx"
     };
 }
 
 /**
  * Convert IP address to long integer
+ * 
  */
 function ip2long(ip) {
     const parts = ip.split('.');
@@ -148,6 +150,7 @@ function ip2long(ip) {
 
 /**
  * Main function to lookup IP
+ * 
  */
 async function lookupIP(ip) {
     try {
@@ -174,7 +177,6 @@ async function lookupIP(ip) {
     }
 }
 
-// Test function
 async function testLookup() {
     const testIPs = [
         "89.163.144.62",
@@ -195,7 +197,6 @@ async function testLookup() {
     }
 }
 
-// Example usage
 async function main() {
     const ip = process.argv[2];
     
@@ -209,8 +210,6 @@ async function main() {
     console.log('Final result:', result);
 }
 
-// testLookup();
-// Export functions for use in other modules
 module.exports = {
     fetchBlockData,
     getBlockData,
@@ -219,10 +218,9 @@ module.exports = {
     lookupIP,
     testLookup,
     getUserNameFromDomain,
-    initializeUserDomainList, // Add this export
+    initializeUserDomainList,
     getUserDomainList
 };
-// Run main function if this file is executed directly
 if (require.main === module) {
     if (process.argv[2] === 'test') {
         testLookup().catch(console.error);

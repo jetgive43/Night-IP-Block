@@ -354,7 +354,6 @@ class LogProcessor {
     try {
       const connection = await connectToDatabase();
       
-      // Remove logs older than 5 minutes (in Japan timezone)
       const fiveMinutesAgo = new Date(Date.now() - (5 * 60 * 1000));
       const japanTime = fiveMinutesAgo.toLocaleString("en-US", {timeZone: "Asia/Tokyo"});
       

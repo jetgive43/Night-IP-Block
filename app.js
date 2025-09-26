@@ -227,7 +227,7 @@ app.get('/api/ips/country/:countryCode', requireAuth, async (req, res) => {
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE country_code = ?
-        ORDER BY request_count DESC
+        ORDER BY blocking_days DESC
         LIMIT ? OFFSET ?
       `;
       
@@ -288,7 +288,7 @@ app.get('/api/ips/asn/:asn', requireAuth, async (req, res) => {
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE asn = ?
-        ORDER BY request_count DESC
+        ORDER BY blocking_days DESC
         LIMIT ? OFFSET ?
       `;
       
@@ -337,7 +337,7 @@ app.get('/api/ips/country/:countryCode/search', requireAuth, async (req, res) =>
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE country_code = ? AND ip LIKE ?
-        ORDER BY request_count DESC
+        ORDER BY blocking_days DESC
         LIMIT 100
       `;
       
@@ -376,7 +376,7 @@ app.get('/api/ips/search', async (req, res) => {
     SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
     FROM blocked_ips
     WHERE ip LIKE ?
-    ORDER BY request_count DESC
+    ORDER BY blocking_days DESC
     LIMIT 100
   `;
   const whitelist = await runSqlQuery(connection, 'SELECT ip FROM whitelist');
@@ -419,7 +419,7 @@ app.get('/api/ips/asn/:asn/search', requireAuth, async (req, res) => {
         SELECT ip, country_code, asn, request_count, is_blocked, blocking_days, last_seen, username
         FROM blocked_ips
         WHERE asn = ? AND ip LIKE ?
-        ORDER BY request_count DESC
+        ORDER BY blocking_days DESC
         LIMIT 100
       `;
       
